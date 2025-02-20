@@ -1,0 +1,9 @@
+# 配置文件
+config.toml
+
+# 缓存文件
+cache/ 
+__pycache__
+.DS_Store
+
+.venv
