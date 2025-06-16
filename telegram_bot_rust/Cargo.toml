@@ -1,0 +1,32 @@
+[package]
+name = "telegram_bot_rust"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+serde = { version = "1.0.203", features = ["derive"] } # Made specific
+serde_json = "1.0.117" # Made specific
+anyhow = "1.0.82" # Made specific
+sha2 = "0.10.8" # Made specific (latest 0.10.x)
+
+# Added dependencies from current subtask
+teloxide = { version = "0.12.2", features = ["macros", "rustls"] } # Specific patch, corrected feature
+tokio = { version = "1.37.0", features = ["full"] } # Specific patch
+reqwest = { version = "0.11.27", features = ["json", "rustls-tls"] } # Specific patch
+log = "0.4.21" # Specific patch
+env_logger = "0.10.2" # Specific patch
+
+# Pinning problematic transitive dependencies (strategy from previous sessions)
+url = "=2.4.1"
+idna = "=0.4.0" # Depends on unicode-bidi and unicode-normalization, not icu
+unicode-bidi = "=0.3.13" # Version compatible with idna 0.4.0 and rust 1.75
+unicode-normalization = "=0.1.22" # Version compatible with idna 0.4.0 and rust 1.75
+
+# Pinning other transitive dependencies that had Rust version issues
+native-tls = "=0.2.13" # Used by reqwest if not using rustls-tls exclusively
+chrono = { version = "0.4.38", features = ["serde"] } # Made specific, added for message timeout
+erasable = "=1.2.1"
+rc-box = "=1.2.0"
+writeable = "=0.5.5" # Often pulled by ICU components, but pinning just in case
+litemap = "=0.7.4"   # ditto
+zerofrom = "=0.1.5"  # ditto

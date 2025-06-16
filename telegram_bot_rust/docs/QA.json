@@ -1,0 +1,6 @@
+[
+  {"question": "Hello", "answer": "Hi there!"},
+  {"question": "How are you?", "answer": "I am a bot, I am fine."},
+  {"question": "What is Rust?", "answer": "A systems programming language focusing on safety, speed, and concurrency."},
+  {"question": "What is Serde?", "answer": "A framework for serializing and deserializing Rust data structures efficiently and generically."}
+]
