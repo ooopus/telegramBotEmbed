@@ -29,6 +29,10 @@ jobs:
       - name: Install cross
         run: cargo install cross
 
+      - name: Install dependencies for Linux target
+        if: matrix.target == 'x86_64-unknown-linux-gnu'
+        run: sudo apt-get update && sudo apt-get install -y libssl-dev
+
       - name: Cache dependencies
         uses: actions/cache@v4
         with:
@@ -36,7 +40,7 @@ jobs:
             ~/.cargo/bin/
             ~/.cargo/registry/index/
             ~/.cargo/registry/cache/
-            ~/.cargo/git/db/
+            ~/.cargo.git/db/
             target/
           key: ${{ runner.os }}-cross-${{ matrix.target }}-${{ hashFiles('**/Cargo.lock') }}
           restore-keys: |
@@ -51,13 +55,18 @@ jobs:
         run: |
           BIN_NAME="telembed" # <-- 你的包名
           TARGET="${{ matrix.target }}"
+
+          # 初始路径不包含 .exe
           BIN_PATH="target/${TARGET}/release/${BIN_NAME}"
           ARTIFACT_NAME="${BIN_NAME}-${TARGET}"
+
+          # 如果目标是 Windows，直接在路径和名称后面追加 .exe
+          # 不再需要 mv 命令，因为文件已经带有 .exe 后缀了
           if [[ "$TARGET" == *"-windows-"* ]]; then
-            mv "${BIN_PATH}" "${BIN_PATH}.exe"
             BIN_PATH="${BIN_PATH}.exe"
             ARTIFACT_NAME="${ARTIFACT_NAME}.exe"
           fi
+
           echo "artifact_name=${ARTIFACT_NAME}" >> $GITHUB_OUTPUT
           echo "bin_path=${BIN_PATH}" >> $GITHUB_OUTPUT
 
@@ -67,10 +76,10 @@ jobs:
           name: ${{ steps.prepare_artifact.outputs.artifact_name }}
           path: ${{ steps.prepare_artifact.outputs.bin_path }}
 
-  # Job 2: 使用原生 macOS 环境构建 macOS 版本
+  # Job 2: 使用原生 macOS 环境构建 macOS 版本 (此部分无需改动)
   build-macos:
     name: Native build for macOS
-    runs-on: macos-latest # 使用苹果官方的构建环境
+    runs-on: macos-latest
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -85,22 +94,21 @@ jobs:
             ~/.cargo/bin/
             ~/.cargo/registry/index/
             ~/.cargo/registry/cache/
-            ~/.cargo/git/db/
+            ~/.cargo.git/db/
             target/
           key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
           restore-keys: |
             ${{ runner.os }}-cargo-
 
       - name: Build binary with cargo
-        # 在原生环境直接使用 cargo 即可
         run: cargo build --release --verbose
 
       - name: Prepare artifact
         id: prepare_artifact
         shell: bash
         run: |
-          BIN_NAME="telembed" # <-- 你的包名
-          TARGET="x86_64-apple-darwin" # 硬编码 macOS 目标
+          BIN_NAME="telembed"
+          TARGET="x86_64-apple-darwin"
           BIN_PATH="target/release/${BIN_NAME}"
           ARTIFACT_NAME="${BIN_NAME}-${TARGET}"
           echo "artifact_name=${ARTIFACT_NAME}" >> $GITHUB_OUTPUT
