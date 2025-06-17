@@ -1,42 +1,42 @@
 [
   {
-    "question": "怎么下载卡组？",
+    "question": "怎么下载JLPT卡组？",
     "answer": "请在 <a href=\"https://github.com/5mdld/anki-jlpt-decks/releases\">Releases</a> 中下载最新版的卡组（后缀为 <code>.apkg</code> ，请不要下载 <code>.zip</code> 文件），或点击以下链接直接下载：\n- <a href=\"https://github.com/5mdld/anki-jlpt-decks/releases/latest/download/NEW-JLPT.apkg\">下载地址 1</a>\n- <a href=\"https://gh-proxy.com/github.com/5mdld/anki-jlpt-decks/releases/latest/download/NEW-JLPT.apkg\">下载地址 2</a> （为中国大陆加速）"
   },
   {
-    "question": "怎么使用卡组？",
+    "question": "怎么使用JLPT卡组？",
     "answer": "1. 下载 <a href=\"https://apps.ankiweb.net/\">Anki</a> （<i>iOS</i> 版需付费，注意不要下错了；其余平台免费）。\n2. 将下载好的 <code>apkg</code> 格式的卡组导入 <i>Anki</i>。\n   - <b>首次</b>下载导入时，推荐将 <code>导入所有牌组预设配置</code> 设置为 <code>打开</code> （下图绿色部分），其中包含了我优化的预设。除非您了解如何配置参数，否则只需调整新词的数量即可开始学习。\n3. （可选）注册一个 <a href=\"https://ankiweb.net/account/signup\">AnkiWeb 账号</a> ，用于多设备间的学习进度同步和云端备份。\n4. （可选）不定期进行错误修复和功能更新，重新下载卡组并覆盖导入即可更新。\n   - 新导入的卡组将覆盖用户对当前卡组的所有修改（卡片内容的修改、字段的增减等，但<b>学习进度不受影响</b>）。请谨慎更新，更新前<b>务必备份</b>！\n   - 请在 <code>导入选项</code> 中，将 <code>合并笔记模板</code> 设置为 <code>打开</code> ，并将 <code>更新笔记</code> 和 <code>更新笔记模板</code> 设置为 <code>始终</code>（如图红色部分）。"
   },
   {
-    "question": "怎么反馈卡组的问题？",
+    "question": "怎么反馈JLPT卡组的问题？",
     "answer": "如有任何关于本卡组的问题，请通过以下方式反馈：\n- 提 <a href=\"https://github.com/5mdld/anki-jlpt-decks/issues\">Issues</a> 或在 <a href=\"https://github.com/5mdld/anki-jlpt-decks/discussions\">Discussions</a> 发帖。\n- 加入 <i>Telegram</i> 交流群：<a href=\"https://t.me/+tvTl5zf3auRlNDM9\">点此链接</a> （入群答案：<code>apkg</code>  ，答错会被 bot 封禁，可联系 <code>@AnkiJapan</code> 解封）。\n- 点击卡片右上角的 <code>反馈</code> 按钮，或 <a href=\"https://ncn8ci2h7v0y.feishu.cn/share/base/form/shrcnTh5DRxtrGWtiWTkdBlSWze?hide_NoteID=1&hide_Note+ID=1\">点此链接</a> 填写反馈问卷（匿名）。"
   },
   {
-    "question": "Q. 卡组导入后不能正常显示",
-    "answer": "A. 本卡组仅保证兼容<b>最新版的 <a href=\"https://apps.ankiweb.net/\">官方版本 Anki</a></b>，不保证兼容其他第三方或旧版 <i>Anki</i>（e.g. <i>AnkiApp</i>、<i>AnkiPro</i>）。"
+    "question": "卡组导入后不能正常显示",
+    "answer": "本卡组仅保证兼容<b>最新版的 <a href=\"https://apps.ankiweb.net/\">官方版本 Anki</a></b>，不保证兼容其他第三方或旧版 <i>Anki</i>（e.g. <i>AnkiApp</i>、<i>AnkiPro</i>）。"
   },
   {
-    "question": "Q. 卡组下载很慢 / 下载失败 / 第一次导入非常慢 / 同步很慢",
-    "answer": "A. 中国大陆用户请尝试使用 <i>VPN</i> 等网络代理工具进行下载。"
+    "question": "卡组下载很慢 / 下载失败 / 第一次导入非常慢 / 同步很慢",
+    "answer": "中国大陆用户请尝试使用 <i>VPN</i> 等网络代理工具进行下载。"
   },
   {
-    "question": "Q. 无法发音 / 缺少媒体文件",
-    "answer": "A. 请检查媒体文件是否<b>完全同步到云端</b>，首次同步可能超过 30 分钟。必要时请使用 <i>VPN</i> 等网络代理工具。"
+    "question": "无法发音 / 缺少媒体文件",
+    "answer": "请检查媒体文件是否<b>完全同步到云端</b>，首次同步可能超过 30 分钟。必要时请使用 <i>VPN</i> 等网络代理工具。"
   },
   {
-    "question": "Q. Windows 上出现卡片切换延迟的问题",
-    "answer": "A. 在 <i>Anki</i> 设置中，将 <code>显示驱动</code> 改为 <code>Software</code> 或 <code>OpenGL</code> 。"
+    "question": "Windows 上出现卡片切换延迟的问题",
+    "answer": "在 <i>Anki</i> 设置中，将 <code>显示驱动</code> 改为 <code>Software</code> 或 <code>OpenGL</code> 。"
   },
   {
-    "question": "Q. 为什么有的卡片正面带有”ふりがな“（假名），我可以关掉吗",
-    "answer": "A. 只对“常用汉字”范围外（即 <i>JLPT</i> 范围外）以及仅凭假名无法判断读音的词汇添加“ふりがな”，不是所有词汇都有，无需关闭。\n如想关闭，请参考下面的“高级选项”。"
+    "question": "为什么有的卡片正面带有”ふりがな“（假名），我可以关掉吗",
+    "answer": "只对“常用汉字”范围外（即 <i>JLPT</i> 范围外）以及仅凭假名无法判断读音的词汇添加“ふりがな”，不是所有词汇都有，无需关闭。\n如想关闭，请参考下面的“高级选项”。"
   },
   {
-    "question": "Q. （AnkiWeb）下载的时候提示 “Daily limit exceeded; please try again tomorrow.”",
-    "answer": "A. 如果您的 <i>IP</i> 地址在 24 小时内下载超过 25 个卡组，则会收到该提示。请尝试更换 <i>IP</i> 或等待 24 小时后再试。"
+    "question": "（AnkiWeb）下载的时候提示 “Daily limit exceeded; please try again tomorrow.”",
+    "answer": "如果您的 <i>IP</i> 地址在 24 小时内下载超过 25 个卡组，则会收到该提示。请尝试更换 <i>IP</i> 或等待 24 小时后再试。"
   },
   {
-    "question": "文法卡组有什么推荐？",
+    "question": "文法卡组有什么推荐？在哪里下载新标准日本语（黄标日）、红宝书单词、绿宝书卡组？",
     "answer": "请参考 <a href=\"https://ankiweb.net/shared/by-author/1681155450\">此链接</a> 下载<b>适时适所</b>、<b>蓝宝书</b>、<b>のんびり文法卡组</b>，<b>新标日</b>、<b>绿宝书</b>、<b>红宝书单词卡组</b>等资源（均由 <i>TG</i> 群友 <code>MasterOfMasterSword</code> 制作，如有问题请在相应卡组下反馈）。"
   },
   {
@@ -44,31 +44,31 @@
     "answer": "<b>综合日语第三版第一册～第四册单词卡组</b>，带真人单词语音和原书课文例句，每一课每一 <i>unit</i> 都打上了对应的 <i>tag</i>，方便按课进度背词。\n<a href=\"https://ankiweb.net/shared/by-author/516873037\">点此下载</a>（由 <i>TG</i> 群友 <code>uovjm</code> 制作，如有问题请在相应卡组下反馈）。"
   },
   {
-    "question": "怎么让正面自动发音，背面也自动播放单词和例句发音？",
+    "question": "怎么让卡片正面自动发音，背面也自动播放单词和例句发音？",
     "answer": "1. <code>牌组选项</code> → <code>音频</code> → 关闭 <code>不要自动播放音频</code> \n2. 正面模板 → <code>function CONFIG()</code> → <code>playback: 'default'</code>"
   },
   {
-    "question": "怎么让正面自动发音，背面仅自动播放单词发音（默认）？",
+    "question": "怎么让卡片正面自动发音，背面仅自动播放单词发音（默认）？",
     "answer": "1. <code>牌组选项</code> → <code>音频</code> → 关闭 <code>不要自动播放音频</code> \n2. 正面模板 → <code>function CONFIG()</code> → <code>playback: 'force'</code>"
   },
   {
-    "question": "怎么让正面手动点击发音，背面仅自动播放单词发音？",
+    "question": "怎么让卡片正面手动点击发音，背面仅自动播放单词发音？",
     "answer": "1. <code>牌组选项</code> → <code>音频</code> → 开启 <code>不要自动播放音频</code>\n2. 正面模板 → <code>function CONFIG()</code> → <code>playback: 'force'</code>"
   },
   {
-    "question": "怎么让正面手动点击发音，背面也手动点击发音？",
+    "question": "怎么让卡片正面手动点击发音，背面也手动点击发音？",
     "answer": "1. <code>牌组选项</code> → <code>音频</code> → 开启 <code>不要自动播放音频</code> \n2. 正面模板 → <code>function CONFIG()</code> → <code>playback: 'default'</code>"
   },
   {
-    "question": "怎么让正面完全不发音，背面自动播放单词和例句发音？",
+    "question": "怎么让卡片正面完全不发音，背面自动播放单词和例句发音？",
     "answer": "1. <code>牌组选项</code> → <code>音频</code> → 关闭 <code>不要自动播放音频</code> \n2. 正面模板 → 删除 <code>{{ VocabAudio }}</code>\n3. 正面模板 →   <code>function CONFIG()</code> → <code>playback: 'default'</code>"
   },
   {
-    "question": "怎么让正面完全不发音，背面仅自动播放单词发音？",
+    "question": "怎么让卡片正面完全不发音，背面仅自动播放单词发音？",
     "answer": "1. <code>牌组选项</code> → <code>音频</code> → 开启 <code>不要自动播放音频</code> \n2. 正面模板 → 删除 <code>{{ VocabAudio }}</code>\n3. 正面模板 →   <code>function CONFIG()</code> → <code>playback: 'force'</code>"
   },
   {
-    "question": "怎么让正面完全不发音，背面手动点击发音？",
+    "question": "怎么让卡片正面完全不发音，背面手动点击发音？",
     "answer": "1. <code>牌组选项</code> → <code>音频</code> → 开启 <code>不要自动播放音频</code>\n2. 正面模板 → 删除 <code>{{ VocabAudio }}</code>\n3. 正面模板 →   <code>function CONFIG()</code> → <code>playback: 'default'</code>"
   },
   {
@@ -120,7 +120,7 @@
     "answer": "在 <i>iOS</i> 端使用其他字体时，请参考以下代码进行调整。\n\n- 如果只额外安装了教科书字体，可以只打开第二段 <code>transform: 0;</code> 这一行。\n- 如果完全替换了字体，就把第一段 <code>transform: translateY(0.6em);</code> 注释掉。\n<code>/* --- iOS 思源宋体振假名高度修复 --- */\n.ios rt,\n.safari rt {\n  transform: translateY(0.6em);\n}\n\n/* --- iOS 若安装教科书字体开启以下样式 --- */\n.ios .VocabKanji rt,\n.safari .VocabKanji rt {\n  /* transform: 0; */\n}</code>"
   },
   {
-    "question": "如何开启正面为中文，背面为日语的卡片？",
+    "question": "如何开启正面为中文，背面为日语的卡片？有人能发我一份中日牌组吗？",
     "answer": "1. 在卡片模板中找到卡片类型部分。\n2. 在卡片类型里选择“2：中-日……”。\n3. <b>分别</b>将正面模板和背面模板中的 <code>{{ #Alt2 }}</code> 修改为 <code>{{ ^Alt2 }} </code>然后保存。\n4. 重启 <i>Anki</i> 后即可看到新增的中-日模板卡片，默认与日-中模板卡片混在一起，您可以自行分组。"
   },
   {
