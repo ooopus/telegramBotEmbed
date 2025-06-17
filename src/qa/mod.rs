@@ -393,3 +393,49 @@ fn cosine_similarity(a: &[f64], b: &[f64]) -> f64 {
     let norm_b: f64 = b.iter().map(|x| x * x).sum::<f64>().sqrt();
     dot_product / (norm_a * norm_b)
 }
+
+pub fn add_qa_item_to_json(config: &Config, item: &QAItem) -> Result<(), anyhow::Error> {
+    let qa_path = Path::new(&config.qa.qa_json_path);
+    log::info!("Adding new QA item to {}", qa_path.display());
+
+    if let Some(parent) = qa_path.parent() {
+        fs::create_dir_all(parent).with_context(|| {
+            format!(
+                "Failed to create directory structure for {}",
+                qa_path.display()
+            )
+        })?;
+    }
+
+    let mut qa_data: Vec<QAItem> = if qa_path.exists() {
+        let file_content = fs::read_to_string(qa_path)
+            .with_context(|| format!("Failed to read existing QA file at {}", qa_path.display()))?;
+        if file_content.trim().is_empty() {
+            Vec::new()
+        } else {
+            serde_json::from_str(&file_content).with_context(|| {
+                format!(
+                    "Failed to deserialize existing QA data from {}",
+                    qa_path.display()
+                )
+            })?
+        }
+    } else {
+        Vec::new()
+    };
+
+    qa_data.push(item.clone());
+
+    let new_content =
+        serde_json::to_string_pretty(&qa_data).context("Failed to serialize updated QA data")?;
+
+    fs::write(qa_path, new_content)
+        .with_context(|| format!("Failed to write updated QA file to {}", qa_path.display()))?;
+
+    log::info!(
+        "Successfully added new QA and saved to {}",
+        qa_path.display()
+    );
+
+    Ok(())
+}
