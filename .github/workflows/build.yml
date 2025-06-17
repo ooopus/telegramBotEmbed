@@ -7,7 +7,7 @@ on:
   workflow_dispatch:
 
 jobs:
-  # Job 1: 使用 Cross 在 Ubuntu 上交叉编译 Linux 和 Windows
+  # 任务1: 使用 Cross 在 Ubuntu 上交叉编译 Linux 和 Windows
   cross-build:
     name: Cross-build for ${{ matrix.target }}
     runs-on: ubuntu-latest
@@ -29,6 +29,7 @@ jobs:
       - name: Install cross
         run: cargo install cross
 
+      # 只有当矩阵目标是 linux 时，才运行此步骤。
       - name: Install dependencies for Linux target
         if: matrix.target == 'x86_64-unknown-linux-gnu'
         run: sudo apt-get update && sudo apt-get install -y libssl-dev
@@ -56,12 +57,10 @@ jobs:
           BIN_NAME="telembed" # <-- 你的包名
           TARGET="${{ matrix.target }}"
 
-          # 初始路径不包含 .exe
           BIN_PATH="target/${TARGET}/release/${BIN_NAME}"
           ARTIFACT_NAME="${BIN_NAME}-${TARGET}"
 
           # 如果目标是 Windows，直接在路径和名称后面追加 .exe
-          # 不再需要 mv 命令，因为文件已经带有 .exe 后缀了
           if [[ "$TARGET" == *"-windows-"* ]]; then
             BIN_PATH="${BIN_PATH}.exe"
             ARTIFACT_NAME="${ARTIFACT_NAME}.exe"
@@ -76,7 +75,7 @@ jobs:
           name: ${{ steps.prepare_artifact.outputs.artifact_name }}
           path: ${{ steps.prepare_artifact.outputs.bin_path }}
 
-  # Job 2: 使用原生 macOS 环境构建 macOS 版本 (此部分无需改动)
+  # 任务2: 使用原生 macOS 环境构建 macOS 版本
   build-macos:
     name: Native build for macOS
     runs-on: macos-latest
