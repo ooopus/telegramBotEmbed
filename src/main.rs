@@ -24,7 +24,11 @@ async fn main() -> Result<(), anyhow::Error> {
     let log_level: log::Level = cfg.log_level.clone().into();
     simple_logger::init_with_level(log_level).unwrap();
 
-    let key_manager = Arc::new(GeminiKeyManager::new(cfg.embedding.api_keys.clone()));
+    let key_manager = Arc::new(GeminiKeyManager::new(
+        cfg.embedding.api_keys.clone(),
+        cfg.embedding.rpm,
+        cfg.embedding.rpd,
+    ));
     let app_state = Arc::new(Mutex::new(AppState::new()));
 
     log::info!("Initializing QAEmbedding and reqwest client...");
@@ -35,10 +39,7 @@ async fn main() -> Result<(), anyhow::Error> {
             "Loading and embedding QA data from: {}",
             cfg.qa.qa_json_path
         );
-        if let Err(e) = qa_guard
-            .load_and_embed_qa(&cfg, cfg.qa.qa_json_path.as_str(), &key_manager)
-            .await
-        {
+        if let Err(e) = qa_guard.load_and_embed_qa(&cfg, &key_manager).await {
             log::error!("Error loading QA embeddings: {:?}", e);
         } else {
             log::info!("Successfully loaded and processed QA data.");

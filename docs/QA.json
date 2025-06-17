@@ -126,5 +126,9 @@
   {
     "question": "如何关闭（删除）正面为中文，背面为日语的卡片？",
     "answer": "1. <b>分别</b>将正面模板和背面模板中的 <code>{{ ^Alt2 }} </code>修改为 <code>{{ #Alt2 }}</code> 然后保存（如上图所示）。\n2. 点击 <i>Anki</i> 的 <code>工具</code> → <code>空白卡片</code> → <code>删除</code>（如下图所示）。"
+  },
+  {
+    "question": "单词的发音感觉不对，不是a ge ru而是类似a ne ru",
+    "answer": "鼻浊音"
   }
 ]

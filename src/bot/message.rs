@@ -1,6 +1,8 @@
 use crate::bot::state::{AppState, QAStatus};
-use crate::qa::format_answer_html;
+use crate::qa::persistence::update_qa_item_by_hash;
+use crate::qa::{QAItem, format_answer_html};
 use std::sync::Arc;
+use teloxide::types::MessageId;
 use teloxide::{
     prelude::*,
     types::{InlineKeyboardButton, InlineKeyboardMarkup, LinkPreviewOptions, Message},
@@ -32,10 +34,16 @@ pub async fn message_handler(
     key_manager: Arc<GeminiKeyManager>,
     state: Arc<Mutex<AppState>>,
 ) -> Result<(), anyhow::Error> {
-    // Attempt to handle the message as a reply in the QA workflow first.
-    let handled = handle_qa_reply(bot.clone(), msg.clone(), state, cfg.clone()).await?;
+    let handled = handle_qa_reply(
+        bot.clone(),
+        msg.clone(),
+        state,
+        cfg.clone(),
+        qa_emb.clone(),
+        key_manager.clone(),
+    )
+    .await?;
 
-    // If it was not a QA reply, proceed with the generic message handler.
     if !handled {
         handle_generic_message(bot, msg, qa_emb, cfg, key_manager).await?;
     }
@@ -48,11 +56,12 @@ async fn handle_qa_reply(
     bot: Bot,
     msg: Message,
     state: Arc<Mutex<AppState>>,
-    _config: Arc<Config>,
+    config: Arc<Config>,
+    qa_embedding: Arc<Mutex<QAEmbedding>>,
+    key_manager: Arc<GeminiKeyManager>,
 ) -> Result<bool, anyhow::Error> {
-    let (reply_to, user, answer_text) = match (msg.reply_to_message(), msg.from.clone(), msg.text())
-    {
-        (Some(reply_to), Some(user), Some(answer_text)) => (reply_to, user, answer_text),
+    let (reply_to, user, new_text) = match (msg.reply_to_message(), msg.from.clone(), msg.text()) {
+        (Some(reply_to), Some(user), Some(new_text)) => (reply_to, user, new_text),
         _ => return Ok(false), // Not a text reply to a message
     };
 
@@ -64,44 +73,123 @@ async fn handle_qa_reply(
             // Ignore replies from non-admins
             return Ok(true); // 'true' because we've identified it's a reply in our flow, but did nothing.
         }
+        // 克隆状态以进行匹配，避免借用冲突
+        let current_status = pending_qa.status.clone();
+        match current_status {
+            QAStatus::AwaitingAnswer { question } => {
+                let question = question.clone();
+                let answer = new_text.to_string();
 
-        if let QAStatus::AwaitingAnswer { question } = pending_qa.status.clone() {
-            let question = question.clone();
-            let answer = answer_text.to_string();
+                pending_qa.status = QAStatus::AwaitingConfirmation {
+                    question: question.clone(),
+                    answer: answer.clone(),
+                };
 
-            pending_qa.status = QAStatus::AwaitingConfirmation {
-                question: question.clone(),
-                answer: answer.clone(),
-            };
+                let buttons = InlineKeyboardMarkup::new(vec![vec![
+                    InlineKeyboardButton::callback("✅ Confirm", "confirm"),
+                    InlineKeyboardButton::callback("📝 Re-edit Answer", "reedit"),
+                    InlineKeyboardButton::callback("❌ Cancel", "cancel"),
+                ]]);
 
-            let buttons = InlineKeyboardMarkup::new(vec![vec![
-                InlineKeyboardButton::callback("✅ Confirm", "confirm"),
-                InlineKeyboardButton::callback("📝 Re-edit Answer", "reedit"),
-                InlineKeyboardButton::callback("❌ Cancel", "cancel"),
-            ]]);
+                let text = format!(
+                    "**Is this Q&A pair correct?**\n\n**Q:** {}\n\n**A:** {}",
+                    markdown::escape(&question),
+                    markdown::escape(&answer)
+                );
 
-            let text = format!(
-                "**Is this Q&A pair correct?**\n\n**Q:** {}\n\n**A:** {}",
-                markdown::escape(&question),
-                markdown::escape(&answer)
-            );
+                bot.edit_message_text(key.0, key.1, text)
+                    .parse_mode(teloxide::types::ParseMode::MarkdownV2)
+                    .reply_markup(buttons)
+                    .await?;
 
-            bot.edit_message_text(key.0, key.1, text)
-                .parse_mode(teloxide::types::ParseMode::MarkdownV2)
-                .reply_markup(buttons)
-                .await?;
-
-            // We can optionally delete the admin's reply message to keep the chat clean.
-            if let Err(e) = bot.delete_message(msg.chat.id, msg.id).await {
-                log::warn!("Failed to delete admin's answer message: {:?}", e);
+                // We can optionally delete the admin's reply message to keep the chat clean.
+                if let Err(e) = bot.delete_message(msg.chat.id, msg.id).await {
+                    log::warn!("Failed to delete admin's answer message: {:?}", e);
+                }
             }
+            QAStatus::AwaitingEditQuestion {
+                old_question_hash,
+                original_answer,
+            } => {
+                let new_item = QAItem {
+                    question: new_text.to_string(),
+                    answer: original_answer,
+                };
+                update_and_reload(
+                    &bot,
+                    &msg,
+                    &key,
+                    &config,
+                    &qa_embedding,
+                    &key_manager,
+                    &old_question_hash,
+                    &new_item,
+                )
+                .await?;
+                state_guard.pending_qas.remove(&key);
+            }
+            QAStatus::AwaitingEditAnswer {
+                old_question_hash,
+                original_question,
+            } => {
+                let new_item = QAItem {
+                    question: original_question,
+                    answer: new_text.to_string(),
+                };
+                update_and_reload(
+                    &bot,
+                    &msg,
+                    &key,
+                    &config,
+                    &qa_embedding,
+                    &key_manager,
+                    &old_question_hash,
+                    &new_item,
+                )
+                .await?;
+                state_guard.pending_qas.remove(&key);
+            }
+            _ => { /* 其他状态，如 AwaitingConfirmation，不应通过文本回复来处理 */
+            }
+        }
+        if let Err(e) = bot.delete_message(msg.chat.id, msg.id).await {
+            log::warn!("Failed to delete admin's reply message: {:?}", e);
         }
         Ok(true) // Handled
     } else {
         Ok(false) // Not a reply to a pending QA message
     }
 }
+async fn update_and_reload(
+    bot: &Bot,
+    msg: &Message,
+    key: &(ChatId, MessageId),
+    config: &Config,
+    qa_embedding: &Arc<Mutex<QAEmbedding>>,
+    key_manager: &Arc<GeminiKeyManager>,
+    old_hash: &str,
+    new_item: &QAItem,
+) -> Result<(), anyhow::Error> {
+    let _ = msg;
+    if let Err(e) = update_qa_item_by_hash(config, old_hash, new_item) {
+        log::error!("Failed to update QA in JSON: {:?}", e);
+        bot.edit_message_text(key.0, key.1, format!("Error saving QA: {}", e))
+            .await?;
+        return Ok(());
+    }
 
+    let mut qa_guard = qa_embedding.lock().await;
+    if let Err(e) = qa_guard.load_and_embed_qa(config, key_manager).await {
+        log::error!("Failed to reload and embed QA data: {:?}", e);
+        bot.edit_message_text(key.0, key.1, format!("Error reloading embeddings: {}", e))
+            .await?;
+    } else {
+        bot.edit_message_text(key.0, key.1, "✅ QA pair updated successfully!")
+            .await?;
+    }
+
+    Ok(())
+}
 /// The original message handler logic for answering questions.
 async fn handle_generic_message(
     bot: Bot,

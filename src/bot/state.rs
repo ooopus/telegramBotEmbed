@@ -8,6 +8,16 @@ pub enum QAStatus {
     AwaitingAnswer { question: String },
     /// The bot has received an answer and is waiting for confirmation.
     AwaitingConfirmation { question: String, answer: String },
+    /// 等待管理员回复以提供新的问题文本
+    AwaitingEditQuestion {
+        old_question_hash: String,
+        original_answer: String,
+    },
+    /// 等待管理员回复以提供新的答案文本
+    AwaitingEditAnswer {
+        old_question_hash: String,
+        original_question: String,
+    },
 }
 
 /// Contains all information about a single pending QA process.
