@@ -1,7 +1,0 @@
-# 基础依赖
-pyTelegramBotAPI>=4.12.0
-requests>=2.31.0
-numpy>=1.24.0
-
-# 配置文件解析
-tomli>=2.0.1
