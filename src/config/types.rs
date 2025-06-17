@@ -1,6 +1,7 @@
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
+#[serde(default)]
 pub struct Config {
     pub telegram: TelegramConfig,
     pub embedding: EmbeddingConfig,
@@ -26,6 +27,7 @@ impl Default for Config {
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
+#[serde(default)]
 pub struct TelegramConfig {
     pub token: String,
 }
@@ -39,10 +41,13 @@ impl Default for TelegramConfig {
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
+#[serde(default)]
 pub struct EmbeddingConfig {
     pub api_keys: Vec<String>,
     pub model: String,
     pub ndims: usize,
+    pub rpm: u32,
+    pub rpd: u32,
 }
 
 impl Default for EmbeddingConfig {
@@ -51,11 +56,14 @@ impl Default for EmbeddingConfig {
             api_keys: vec!["YOUR_API_KEY".to_string()],
             model: "gemini-embedding-exp-03-07".to_string(),
             ndims: 3072,
+            rpm: 5,
+            rpd: 100,
         }
     }
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
+#[serde(default)]
 pub struct CacheConfig {
     pub dir: String,
 }
@@ -69,17 +77,19 @@ impl Default for CacheConfig {
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
+#[serde(default)]
 pub struct SimilarityConfig {
     pub threshold: f32,
 }
 
 impl Default for SimilarityConfig {
     fn default() -> Self {
-        Self { threshold: 0.95 }
+        Self { threshold: 0.85 }
     }
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
+#[serde(default)]
 pub struct MessageConfig {
     pub delete_delay: u64,
     pub timeout: i64,
@@ -122,6 +132,7 @@ impl From<LogLevel> for log::Level {
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
+#[serde(default)]
 pub struct QaConfig {
     pub qa_json_path: String,
 }

@@ -1,0 +1,89 @@
+name: Build
+
+# 工作流触发器
+# - main 分支收到 push 时触发
+# - 允许在 GitHub Actions 页面手动触发
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+jobs:
+  build:
+    name: Build for ${{ matrix.os }}
+    # 使用矩阵策略为三个主流操作系统并行构建
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+
+    steps:
+      # 步骤1: 检出代码
+      # 拉取仓库的最新代码
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      # 步骤2: 安装 Rust 工具链
+      # 使用 dtolnay/rust-toolchain action 来确保有稳定的 Rust 环境
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      # 步骤3: 安装系统依赖 (仅限 Linux)
+      # 某些 Rust crate (如 reqwest) 可能依赖 OpenSSL。
+      # 此步骤为 Ubuntu 环境安装 libssl-dev 和 pkg-config。
+      - name: Install dependencies (Linux)
+        if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y libssl-dev pkg-config
+
+      # 步骤4: 缓存 Cargo 依赖
+      # 缓存 ~/.cargo 和 target 目录以加快后续构建速度
+      - name: Cache cargo registry and build artifacts
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/bin/
+            ~/.cargo/registry/index/
+            ~/.cargo/registry/cache/
+            ~/.cargo/git/db/
+            target/
+          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+
+      # 步骤5: 构建项目
+      # 运行 cargo build 命令以编译 release 版本的二进制文件
+      # 注意：请将下面的 "telegramBotEmbed" 替换为您的包名 (在 Cargo.toml 中定义的 name)
+      - name: Build binary
+        run: cargo build --release --verbose
+        env:
+          # 在 Windows 上，需要静态链接 CRT 以提高可移植性
+          RUSTFLAGS: -C target-feature=+crt-static
+
+      # 步骤6: 准备上传的构件
+      # 根据操作系统确定二进制文件的路径和名称
+      # 注意：请将下面的 "telegramBotEmbed" 替换为您的包名
+      - name: Prepare artifact
+        id: prepare_artifact
+        shell: bash
+        run: |
+          BIN_NAME="telegramBotEmbed" # <-- 确保这是您 Cargo.toml 中的包名
+          OS_NAME="${{ runner.os }}"
+
+          if [ "$OS_NAME" = "Windows" ]; then
+            BIN_PATH="target/release/${BIN_NAME}.exe"
+            ARTIFACT_NAME="${BIN_NAME}-${OS_NAME}.exe"
+          else
+            BIN_PATH="target/release/${BIN_NAME}"
+            ARTIFACT_NAME="${BIN_NAME}-${OS_NAME}"
+          fi
+
+          echo "artifact_name=${ARTIFACT_NAME}" >> $GITHUB_OUTPUT
+          echo "bin_path=${BIN_PATH}" >> $GITHUB_OUTPUT
+
+      # 步骤7: 上传构件
+      # 将编译好的二进制文件作为构件 (artifact) 上传。
+      # 您可以在工作流运行结束后下载这些文件。
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ steps.prepare_artifact.outputs.artifact_name }}
+          path: ${{ steps.prepare_artifact.outputs.bin_path }}
