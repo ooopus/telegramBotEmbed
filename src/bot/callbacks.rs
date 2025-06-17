@@ -1,25 +1,18 @@
 use crate::{
-    bot::state::{AppState, PendingQAInfo, QAStatus},
+    bot::{
+        state::{AppState, PendingQAInfo, QAStatus},
+        ui,
+        utils::is_admin,
+    },
     config::Config,
     gemini::key_manager::GeminiKeyManager,
     qa::{QAEmbedding, QAItem, add_qa_item_to_json, delete_qa_item_by_hash, get_question_hash},
 };
 use std::sync::Arc;
-use teloxide::{
-    prelude::*,
-    types::{InlineKeyboardButton, InlineKeyboardMarkup},
-    utils::markdown,
-};
+use teloxide::{prelude::*, utils::markdown};
 use tokio::sync::Mutex;
 
-async fn is_admin(bot: &Bot, chat_id: ChatId, user_id: UserId) -> bool {
-    match bot.get_chat_administrators(chat_id).await {
-        Ok(admins) => admins.iter().any(|m| m.user.id == user_id),
-        Err(_) => false,
-    }
-}
-
-// 用短哈希查找QA项
+// Find a QA item by its short hash.
 fn find_qa_by_short_hash(qa_embedding: &QAEmbedding, short_hash: &str) -> Option<QAItem> {
     qa_embedding
         .qa_data
@@ -41,7 +34,7 @@ pub async fn callback_handler(
         _ => return Ok(()),
     };
 
-    if !is_admin(&bot, message.chat().id, user.id).await {
+    if !is_admin(&bot, message.chat().id, user.id, &config).await {
         bot.answer_callback_query(q.id)
             .text("Only administrators can perform this action.")
             .show_alert(true)
@@ -54,12 +47,10 @@ pub async fn callback_handler(
 
     let key = (message.chat().id, message.id());
 
-    // 对于不需要 state 的操作，提前处理
+    // Handle actions that do not require state first
     match action {
         "view_qa" => {
-            // 在显示视图前，清除此消息可能存在的任何待处理状态（例如，当我们取消编辑时）
             state.lock().await.pending_qas.remove(&key);
-
             let short_hash = payload.to_string();
             let qa_guard = qa_embedding.lock().await;
             if let Some(item) = find_qa_by_short_hash(&qa_guard, &short_hash) {
@@ -68,23 +59,7 @@ pub async fn callback_handler(
                     markdown::escape(&item.question),
                     markdown::escape(&item.answer)
                 );
-                // 使用短哈希创建新按钮
-                let keyboard = InlineKeyboardMarkup::new(vec![
-                    vec![
-                        InlineKeyboardButton::callback(
-                            "📝 Edit Question",
-                            format!("edit_q_prompt:{}", short_hash),
-                        ),
-                        InlineKeyboardButton::callback(
-                            "📝 Edit Answer",
-                            format!("edit_a_prompt:{}", short_hash),
-                        ),
-                    ],
-                    vec![InlineKeyboardButton::callback(
-                        "🗑️ Delete",
-                        format!("delete_prompt:{}", short_hash),
-                    )],
-                ]);
+                let keyboard = ui::qa_management_keyboard(&short_hash);
                 bot.edit_message_text(message.chat().id, message.id(), text)
                     .parse_mode(teloxide::types::ParseMode::MarkdownV2)
                     .reply_markup(keyboard)
@@ -94,13 +69,7 @@ pub async fn callback_handler(
         }
         "delete_prompt" => {
             let short_hash = payload.to_string();
-            let keyboard = InlineKeyboardMarkup::new(vec![vec![
-                InlineKeyboardButton::callback(
-                    "✅ Yes, Delete",
-                    format!("delete_confirm:{}", short_hash),
-                ),
-                InlineKeyboardButton::callback("❌ No, Cancel", format!("view_qa:{}", short_hash)),
-            ]]);
+            let keyboard = ui::delete_confirmation_keyboard(&short_hash);
             bot.edit_message_text(
                 message.chat().id,
                 message.id(),
@@ -124,7 +93,7 @@ pub async fn callback_handler(
                     )
                     .await?;
                 } else {
-                    drop(qa_guard); // 释放锁，以便下面重新加载
+                    drop(qa_guard); // Release lock to allow reloading
                     let mut qa_guard_mut = qa_embedding.lock().await;
                     if let Err(e) = qa_guard_mut.load_and_embed_qa(&config, &key_manager).await {
                         log::error!("Failed to reload and embed QA data after deletion: {:?}", e);
@@ -175,12 +144,7 @@ pub async fn callback_handler(
                     .pending_qas
                     .insert(key, PendingQAInfo { status: new_status });
 
-                let keyboard =
-                    InlineKeyboardMarkup::new(vec![vec![InlineKeyboardButton::callback(
-                        "❌ Cancel",
-                        format!("view_qa:{}", short_hash),
-                    )]]);
-
+                let keyboard = ui::cancel_edit_keyboard(&short_hash);
                 bot.edit_message_text(message.chat().id, message.id(), prompt_text)
                     .reply_markup(keyboard)
                     .await?;
@@ -190,13 +154,12 @@ pub async fn callback_handler(
         _ => {}
     }
 
-    // 对于需要 state 的操作，在这里处理
+    // Handle actions that require state
     let mut state_guard = state.lock().await;
     let pending_qa = match state_guard.pending_qas.get_mut(&key) {
         Some(info) => info,
         None => {
             bot.answer_callback_query(q.id).await?;
-            // 如果消息不是关于删除/编辑的，那么它可能已过期
             if !matches!(
                 action,
                 "view_qa" | "delete_prompt" | "delete_confirm" | "edit_q_prompt" | "edit_a_prompt"
@@ -208,7 +171,7 @@ pub async fn callback_handler(
         }
     };
 
-    match data.as_str() {
+    match action {
         "cancel" => {
             bot.answer_callback_query(q.id).await?;
             bot.edit_message_text(message.chat().id, message.id(), "❌ Action Cancelled.")
@@ -230,9 +193,7 @@ pub async fn callback_handler(
                     ),
                 )
                 .parse_mode(teloxide::types::ParseMode::MarkdownV2)
-                .reply_markup(InlineKeyboardMarkup::new(vec![vec![
-                    InlineKeyboardButton::callback("❌ Cancel", "cancel"),
-                ]]))
+                .reply_markup(ui::reedit_keyboard())
                 .await?;
             }
         }

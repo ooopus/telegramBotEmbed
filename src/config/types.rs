@@ -30,12 +30,16 @@ impl Default for Config {
 #[serde(default)]
 pub struct TelegramConfig {
     pub token: String,
+    pub super_admins: Vec<i64>,
+    pub allowed_group_ids: Vec<i64>,
 }
 
 impl Default for TelegramConfig {
     fn default() -> Self {
         Self {
             token: "YOUR_TELEGRAM_BOT_TOKEN".to_string(),
+            super_admins: vec![],
+            allowed_group_ids: vec![],
         }
     }
 }

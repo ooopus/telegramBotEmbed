@@ -1,29 +1,18 @@
 use crate::bot::state::{AppState, QAStatus};
+use crate::bot::ui;
+use crate::bot::utils::{is_admin, schedule_message_deletion};
 use crate::qa::persistence::update_qa_item_by_hash;
 use crate::qa::{QAItem, format_answer_html};
 use std::sync::Arc;
 use teloxide::types::MessageId;
 use teloxide::{
     prelude::*,
-    types::{InlineKeyboardButton, InlineKeyboardMarkup, LinkPreviewOptions, Message},
+    types::{LinkPreviewOptions, Message},
     utils::markdown,
 };
 use tokio::sync::Mutex;
 
 use crate::{config::Config, gemini::key_manager::GeminiKeyManager, qa::QAEmbedding};
-
-async fn is_admin(bot: &Bot, chat_id: ChatId, user_id: UserId) -> bool {
-    if !(chat_id.is_group() || chat_id.is_channel_or_supergroup()) {
-        return true; // Not a group, no admin check needed
-    }
-    match bot.get_chat_administrators(chat_id).await {
-        Ok(admins) => admins.iter().any(|m| m.user.id == user_id),
-        Err(e) => {
-            log::error!("Could not get chat administrators: {:?}", e);
-            false
-        }
-    }
-}
 
 /// The main message handler, which routes to the appropriate logic.
 pub async fn message_handler(
@@ -34,6 +23,16 @@ pub async fn message_handler(
     key_manager: Arc<GeminiKeyManager>,
     state: Arc<Mutex<AppState>>,
 ) -> Result<(), anyhow::Error> {
+    // If the chat is a group chat, check if it's in the allowed list.
+    if msg.chat.is_group() || msg.chat.is_supergroup() {
+        if !cfg.telegram.allowed_group_ids.is_empty()
+            && !cfg.telegram.allowed_group_ids.contains(&msg.chat.id.0)
+        {
+            log::warn!("Ignoring message from unauthorized group: {}", msg.chat.id);
+            return Ok(());
+        }
+    }
+
     let handled = handle_qa_reply(
         bot.clone(),
         msg.clone(),
@@ -69,11 +68,11 @@ async fn handle_qa_reply(
     let mut state_guard = state.lock().await;
 
     if let Some(pending_qa) = state_guard.pending_qas.get_mut(&key) {
-        if !is_admin(&bot, msg.chat.id, user.id).await {
+        if !is_admin(&bot, msg.chat.id, user.id, &config).await {
             // Ignore replies from non-admins
             return Ok(true); // 'true' because we've identified it's a reply in our flow, but did nothing.
         }
-        // 克隆状态以进行匹配，避免借用冲突
+        // Clone status to avoid borrow conflicts
         let current_status = pending_qa.status.clone();
         match current_status {
             QAStatus::AwaitingAnswer { question } => {
@@ -85,27 +84,17 @@ async fn handle_qa_reply(
                     answer: answer.clone(),
                 };
 
-                let buttons = InlineKeyboardMarkup::new(vec![vec![
-                    InlineKeyboardButton::callback("✅ Confirm", "confirm"),
-                    InlineKeyboardButton::callback("📝 Re-edit Answer", "reedit"),
-                    InlineKeyboardButton::callback("❌ Cancel", "cancel"),
-                ]]);
-
                 let text = format!(
                     "**Is this Q&A pair correct?**\n\n**Q:** {}\n\n**A:** {}",
                     markdown::escape(&question),
                     markdown::escape(&answer)
                 );
 
+                // This is an interactive message, do not auto-delete
                 bot.edit_message_text(key.0, key.1, text)
                     .parse_mode(teloxide::types::ParseMode::MarkdownV2)
-                    .reply_markup(buttons)
+                    .reply_markup(ui::confirm_reedit_cancel_keyboard())
                     .await?;
-
-                // We can optionally delete the admin's reply message to keep the chat clean.
-                if let Err(e) = bot.delete_message(msg.chat.id, msg.id).await {
-                    log::warn!("Failed to delete admin's answer message: {:?}", e);
-                }
             }
             QAStatus::AwaitingEditQuestion {
                 old_question_hash,
@@ -149,9 +138,9 @@ async fn handle_qa_reply(
                 .await?;
                 state_guard.pending_qas.remove(&key);
             }
-            _ => { /* 其他状态，如 AwaitingConfirmation，不应通过文本回复来处理 */
-            }
+            _ => { /* Other states like AwaitingConfirmation are not handled by text replies */ }
         }
+        // Delete the admin's reply message to keep the chat clean.
         if let Err(e) = bot.delete_message(msg.chat.id, msg.id).await {
             log::warn!("Failed to delete admin's reply message: {:?}", e);
         }
@@ -173,6 +162,7 @@ async fn update_and_reload(
     let _ = msg;
     if let Err(e) = update_qa_item_by_hash(config, old_hash, new_item) {
         log::error!("Failed to update QA in JSON: {:?}", e);
+        // Do not auto-delete error messages on interactive panels
         bot.edit_message_text(key.0, key.1, format!("Error saving QA: {}", e))
             .await?;
         return Ok(());
@@ -198,6 +188,23 @@ async fn handle_generic_message(
     cfg: Arc<Config>,
     key_manager: Arc<GeminiKeyManager>,
 ) -> Result<(), anyhow::Error> {
+    // If the chat is private, only allow super admins to interact.
+    if msg.chat.is_private() {
+        if let Some(ref user) = msg.from {
+            if !crate::bot::utils::is_super_admin(user.id, &cfg) {
+                log::warn!(
+                    "Ignoring private message from non-super-admin user: {}",
+                    user.id
+                );
+                return Ok(()); // Silently ignore
+            }
+        } else {
+            // Should not happen in private chats, but as a safeguard.
+            log::warn!("Ignoring private message with no sender information.");
+            return Ok(());
+        }
+    }
+
     // Message freshness check
     let current_time = chrono::Utc::now().timestamp();
     if (current_time - msg.date.timestamp()) > cfg.message.timeout {
@@ -211,6 +218,11 @@ async fn handle_generic_message(
     }
 
     if let Some(text) = msg.text() {
+        // In groups, schedule deletion of the user's message that triggered the bot
+        if msg.chat.is_group() || msg.chat.is_supergroup() {
+            schedule_message_deletion(bot.clone(), cfg.clone(), msg.clone());
+        }
+
         log::info!("Chat ID: {}, Received message: {}", msg.chat.id, text);
 
         let qa_guard = qa_emb.lock().await;
@@ -231,20 +243,8 @@ async fn handle_generic_message(
                     .parse_mode(teloxide::types::ParseMode::Html)
                     .await?;
 
-                if msg.chat.is_group() || msg.chat.is_supergroup() {
-                    tokio::spawn(async move {
-                        tokio::time::sleep(tokio::time::Duration::from_secs(
-                            cfg.message.delete_delay,
-                        ))
-                        .await;
-                        if let Err(e) = bot
-                            .delete_message(sent_message.chat.id, sent_message.id)
-                            .await
-                        {
-                            log::error!("Failed to delete message: {:?}", e);
-                        }
-                    });
-                }
+                // Use the centralized deletion scheduler
+                schedule_message_deletion(bot, cfg, sent_message);
             }
             Ok(None) => {
                 // Do nothing if no match is found, to avoid spamming "I don't know"
