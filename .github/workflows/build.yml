@@ -1,8 +1,5 @@
-name: Build with Cross-Compilation
+name: Build Project
 
-# 工作流触发器
-# - main 分支收到 push 时触发
-# - 允许在 GitHub Actions 页面手动触发
 on:
   push:
     branches:
@@ -10,53 +7,29 @@ on:
   workflow_dispatch:
 
 jobs:
-  # 使用单个 job，通过矩阵策略为不同目标平台进行交叉编译
+  # Job 1: 使用 Cross 在 Ubuntu 上交叉编译 Linux 和 Windows
   cross-build:
-    name: Build for ${{ matrix.target }}
-    # 统一使用 ubuntu-latest，因为它对容器（Docker）的支持最好，是运行 Cross 的理想环境
+    name: Cross-build for ${{ matrix.target }}
     runs-on: ubuntu-latest
-
     strategy:
-      # 当一个构建失败时，不取消其他正在进行的构建
       fail-fast: false
       matrix:
         target:
-          # 在此定义所有需要交叉编译的目标平台
           - x86_64-unknown-linux-gnu
           - x86_64-pc-windows-gnu
-          # 注意：macOS 目标可能需要额外配置，例如使用 osxcross。
-          # cross 默认可能无法直接支持，具体取决于项目的依赖。
-          - x86_64-apple-darwin
-          # 您还可以添加其他目标，例如 ARM 架构：
-          # - aarch64-unknown-linux-gnu
-
     steps:
-      # ------------------------------------------------------------------
-      # 步骤 1: 检出代码
-      # ------------------------------------------------------------------
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      # ------------------------------------------------------------------
-      # 步骤 2: 安装 Rust 工具链
-      # ------------------------------------------------------------------
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable
         with:
-          # 添加所有需要的目标，以便 Rustup 可以管理它们
           targets: ${{ matrix.target }}
 
-      # ------------------------------------------------------------------
-      # 步骤 3: 安装 Cross 工具
-      # ------------------------------------------------------------------
       - name: Install cross
         run: cargo install cross
 
-      # ------------------------------------------------------------------
-      # 步骤 4: 缓存 Cargo 依赖和 Cross 数据
-      # 缓存不仅包括 crate，还包括 cross 下载的镜像等，以加快后续构建
-      # ------------------------------------------------------------------
-      - name: Cache cargo registry and build artifacts
+      - name: Cache dependencies
         uses: actions/cache@v4
         with:
           path: |
@@ -65,53 +38,74 @@ jobs:
             ~/.cargo/registry/cache/
             ~/.cargo/git/db/
             target/
-          # Key 现在基于 runner OS (始终是 Linux) 和 Cargo.lock
-          key: ${{ runner.os }}-cross-${{ hashFiles('**/Cargo.lock') }}
+          key: ${{ runner.os }}-cross-${{ matrix.target }}-${{ hashFiles('**/Cargo.lock') }}
           restore-keys: |
-            ${{ runner.os }}-cross-
+            ${{ runner.os }}-cross-${{ matrix.target }}-
 
-      # ------------------------------------------------------------------
-      # 步骤 5: 使用 Cross 构建项目
-      # Cross 会自动拉取并使用对应目标平台的 Docker 镜像进行编译
-      # ------------------------------------------------------------------
       - name: Build binary with cross
         run: cross build --release --target ${{ matrix.target }} --verbose
 
-      # ------------------------------------------------------------------
-      # 步骤 6: 准备上传的构件
-      # 根据目标平台 (matrix.target) 确定二进制文件的路径和名称
-      # ------------------------------------------------------------------
       - name: Prepare artifact
         id: prepare_artifact
         shell: bash
         run: |
-          # <-- 确保这是您 Cargo.toml 中的 [package].name
-          BIN_NAME="telembed"
+          BIN_NAME="telembed" # <-- 你的包名
           TARGET="${{ matrix.target }}"
-
-          # 确定输出目录和二进制文件路径
           BIN_PATH="target/${TARGET}/release/${BIN_NAME}"
           ARTIFACT_NAME="${BIN_NAME}-${TARGET}"
-
-          # 为 Windows 目标添加 .exe 后缀
           if [[ "$TARGET" == *"-windows-"* ]]; then
             mv "${BIN_PATH}" "${BIN_PATH}.exe"
             BIN_PATH="${BIN_PATH}.exe"
             ARTIFACT_NAME="${ARTIFACT_NAME}.exe"
           fi
-
           echo "artifact_name=${ARTIFACT_NAME}" >> $GITHUB_OUTPUT
           echo "bin_path=${BIN_PATH}" >> $GITHUB_OUTPUT
 
-          # 列出文件以供调试
-          echo "Artifact Name: ${ARTIFACT_NAME}"
-          echo "Binary Path: ${BIN_PATH}"
-          ls -l "$(dirname "$BIN_PATH")"
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ steps.prepare_artifact.outputs.artifact_name }}
+          path: ${{ steps.prepare_artifact.outputs.bin_path }}
 
-      # ------------------------------------------------------------------
-      # 步骤 7: 上传构件
-      # 将编译好的二进制文件作为构件 (artifact) 上传
-      # ------------------------------------------------------------------
+  # Job 2: 使用原生 macOS 环境构建 macOS 版本
+  build-macos:
+    name: Native build for macOS
+    runs-on: macos-latest # 使用苹果官方的构建环境
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache dependencies
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/bin/
+            ~/.cargo/registry/index/
+            ~/.cargo/registry/cache/
+            ~/.cargo/git/db/
+            target/
+          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-
+
+      - name: Build binary with cargo
+        # 在原生环境直接使用 cargo 即可
+        run: cargo build --release --verbose
+
+      - name: Prepare artifact
+        id: prepare_artifact
+        shell: bash
+        run: |
+          BIN_NAME="telembed" # <-- 你的包名
+          TARGET="x86_64-apple-darwin" # 硬编码 macOS 目标
+          BIN_PATH="target/release/${BIN_NAME}"
+          ARTIFACT_NAME="${BIN_NAME}-${TARGET}"
+          echo "artifact_name=${ARTIFACT_NAME}" >> $GITHUB_OUTPUT
+          echo "bin_path=${BIN_PATH}" >> $GITHUB_OUTPUT
+
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
