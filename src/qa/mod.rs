@@ -1,10 +1,10 @@
 mod embedding;
+pub mod management;
 pub mod persistence;
 mod search;
 pub mod types;
 mod utils;
 
-pub use persistence::{add_qa_item_to_json, delete_qa_item_by_hash};
 pub use types::{QAEmbedding, QAItem};
 pub use utils::{format_answer_html, get_question_hash};
 

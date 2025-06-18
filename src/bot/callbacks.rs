@@ -6,7 +6,7 @@ use crate::{
     },
     config::Config,
     gemini::key_manager::GeminiKeyManager,
-    qa::{QAEmbedding, QAItem, add_qa_item_to_json, delete_qa_item_by_hash, get_question_hash},
+    qa::{QAEmbedding, QAItem, get_question_hash, management},
 };
 use std::sync::Arc;
 use teloxide::{prelude::*, utils::markdown};
@@ -84,30 +84,25 @@ pub async fn callback_handler(
             let qa_guard = qa_embedding.lock().await;
             if let Some(item) = find_qa_by_short_hash(&qa_guard, &short_hash) {
                 let full_hash = get_question_hash(&item.question);
-                if let Err(e) = delete_qa_item_by_hash(&config, &full_hash) {
-                    log::error!("Failed to delete QA from JSON: {:?}", e);
-                    bot.edit_message_text(
-                        message.chat().id,
-                        message.id(),
-                        format!("Error deleting QA: {}", e),
-                    )
-                    .await?;
-                } else {
-                    drop(qa_guard); // Release lock to allow reloading
-                    let mut qa_guard_mut = qa_embedding.lock().await;
-                    if let Err(e) = qa_guard_mut.load_and_embed_qa(&config, &key_manager).await {
-                        log::error!("Failed to reload and embed QA data after deletion: {:?}", e);
-                        bot.edit_message_text(
-                            message.chat().id,
-                            message.id(),
-                            format!("QA deleted, but failed to reload embeddings: {}", e),
-                        )
-                        .await?;
-                    } else {
+                drop(qa_guard); // 在调用管理函数前释放锁
+
+                // 使用新的 management 模块来处理删除和重新加载
+                match management::delete_qa(&config, &key_manager, &qa_embedding, &full_hash).await
+                {
+                    Ok(_) => {
                         bot.edit_message_text(
                             message.chat().id,
                             message.id(),
                             "✅ QA pair deleted successfully!",
+                        )
+                        .await?;
+                    }
+                    Err(e) => {
+                        log::error!("Failed to delete and reload QA: {:?}", e);
+                        bot.edit_message_text(
+                            message.chat().id,
+                            message.id(),
+                            format!("Error during deletion: {}", e),
                         )
                         .await?;
                     }
@@ -202,40 +197,30 @@ pub async fn callback_handler(
                 bot.answer_callback_query(q.id).text("Saving...").await?;
                 let new_item = QAItem { question, answer };
 
-                if let Err(e) = add_qa_item_to_json(&config, &new_item) {
-                    log::error!("Failed to save new QA to JSON: {:?}", e);
-                    bot.edit_message_text(
-                        message.chat().id,
-                        message.id(),
-                        format!("Error saving QA: {}", e),
-                    )
-                    .await?;
-                    state_guard.pending_qas.remove(&key);
-                    return Ok(());
+                drop(state_guard); // 释放 state 上的锁
+
+                // 使用新的 management 模块来处理添加和重新加载
+                match management::add_qa(&config, &key_manager, &qa_embedding, &new_item).await {
+                    Ok(_) => {
+                        bot.edit_message_text(
+                            message.chat().id,
+                            message.id(),
+                            "✅ QA pair added successfully!",
+                        )
+                        .await?;
+                    }
+                    Err(e) => {
+                        log::error!("Failed to add and reload QA: {:?}", e);
+                        bot.edit_message_text(
+                            message.chat().id,
+                            message.id(),
+                            format!("Error saving QA: {}", e),
+                        )
+                        .await?;
+                    }
                 }
 
-                drop(state_guard); // Release lock on state
-
-                // Reload embeddings
-                let mut qa_guard = qa_embedding.lock().await;
-                if let Err(e) = qa_guard.load_and_embed_qa(&config, &key_manager).await {
-                    log::error!("Failed to reload and embed QA data: {:?}", e);
-                    bot.edit_message_text(
-                        message.chat().id,
-                        message.id(),
-                        format!("Error reloading embeddings: {}", e),
-                    )
-                    .await?;
-                } else {
-                    bot.edit_message_text(
-                        message.chat().id,
-                        message.id(),
-                        "✅ QA pair added successfully!",
-                    )
-                    .await?;
-                }
-
-                // Re-acquire lock to remove
+                // 重新获取锁以移除
                 state.lock().await.pending_qas.remove(&key);
             }
         }

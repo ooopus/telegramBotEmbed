@@ -1,10 +1,9 @@
 use crate::bot::state::{AppState, QAStatus};
 use crate::bot::ui;
 use crate::bot::utils::{is_admin, schedule_message_deletion};
-use crate::qa::persistence::update_qa_item_by_hash;
+use crate::qa::management;
 use crate::qa::{QAItem, format_answer_html};
 use std::sync::Arc;
-use teloxide::types::MessageId;
 use teloxide::{
     prelude::*,
     types::{LinkPreviewOptions, Message},
@@ -104,17 +103,27 @@ async fn handle_qa_reply(
                     question: new_text.to_string(),
                     answer: original_answer,
                 };
-                update_and_reload(
-                    &bot,
-                    &msg,
-                    &key,
+
+                // 直接调用新的 management 函数
+                match management::update_qa(
                     &config,
-                    &qa_embedding,
                     &key_manager,
+                    &qa_embedding,
                     &old_question_hash,
                     &new_item,
                 )
-                .await?;
+                .await
+                {
+                    Ok(_) => {
+                        bot.edit_message_text(key.0, key.1, "✅ QA pair updated successfully!")
+                            .await?;
+                    }
+                    Err(e) => {
+                        log::error!("Failed to update and reload QA: {:?}", e);
+                        bot.edit_message_text(key.0, key.1, format!("Error saving QA: {}", e))
+                            .await?;
+                    }
+                }
                 state_guard.pending_qas.remove(&key);
             }
             QAStatus::AwaitingEditAnswer {
@@ -125,17 +134,27 @@ async fn handle_qa_reply(
                     question: original_question,
                     answer: new_text.to_string(),
                 };
-                update_and_reload(
-                    &bot,
-                    &msg,
-                    &key,
+
+                // 直接调用新的 management 函数
+                match management::update_qa(
                     &config,
-                    &qa_embedding,
                     &key_manager,
+                    &qa_embedding,
                     &old_question_hash,
                     &new_item,
                 )
-                .await?;
+                .await
+                {
+                    Ok(_) => {
+                        bot.edit_message_text(key.0, key.1, "✅ QA pair updated successfully!")
+                            .await?;
+                    }
+                    Err(e) => {
+                        log::error!("Failed to update and reload QA: {:?}", e);
+                        bot.edit_message_text(key.0, key.1, format!("Error updating QA: {}", e))
+                            .await?;
+                    }
+                }
                 state_guard.pending_qas.remove(&key);
             }
             _ => { /* Other states like AwaitingConfirmation are not handled by text replies */ }
@@ -149,37 +168,7 @@ async fn handle_qa_reply(
         Ok(false) // Not a reply to a pending QA message
     }
 }
-async fn update_and_reload(
-    bot: &Bot,
-    msg: &Message,
-    key: &(ChatId, MessageId),
-    config: &Config,
-    qa_embedding: &Arc<Mutex<QAEmbedding>>,
-    key_manager: &Arc<GeminiKeyManager>,
-    old_hash: &str,
-    new_item: &QAItem,
-) -> Result<(), anyhow::Error> {
-    let _ = msg;
-    if let Err(e) = update_qa_item_by_hash(config, old_hash, new_item) {
-        log::error!("Failed to update QA in JSON: {:?}", e);
-        // Do not auto-delete error messages on interactive panels
-        bot.edit_message_text(key.0, key.1, format!("Error saving QA: {}", e))
-            .await?;
-        return Ok(());
-    }
 
-    let mut qa_guard = qa_embedding.lock().await;
-    if let Err(e) = qa_guard.load_and_embed_qa(config, key_manager).await {
-        log::error!("Failed to reload and embed QA data: {:?}", e);
-        bot.edit_message_text(key.0, key.1, format!("Error reloading embeddings: {}", e))
-            .await?;
-    } else {
-        bot.edit_message_text(key.0, key.1, "✅ QA pair updated successfully!")
-            .await?;
-    }
-
-    Ok(())
-}
 /// The original message handler logic for answering questions.
 async fn handle_generic_message(
     bot: Bot,
