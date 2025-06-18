@@ -1,14 +1,13 @@
 use crate::bot::state::{AppState, QAStatus};
 use crate::bot::ui;
 use crate::bot::utils::{is_admin, schedule_message_deletion};
+use crate::qa::QAItem;
 use crate::qa::management;
-use crate::qa::{QAItem, format_answer_html};
 use std::sync::Arc;
-use teloxide::{
-    prelude::*,
-    types::{LinkPreviewOptions, Message},
-    utils::markdown,
-};
+use teloxide::prelude::*;
+use teloxide::types::{LinkPreviewOptions, Message};
+use teloxide::utils::markdown::{self, blockquote};
+use teloxide::utils::render::RenderMessageTextHelper;
 use tokio::sync::Mutex;
 
 use crate::{config::Config, gemini::key_manager::GeminiKeyManager, qa::QAEmbedding};
@@ -57,7 +56,11 @@ async fn handle_qa_reply(
     qa_embedding: Arc<Mutex<QAEmbedding>>,
     key_manager: Arc<GeminiKeyManager>,
 ) -> Result<bool, anyhow::Error> {
-    let (reply_to, user, new_text) = match (msg.reply_to_message(), msg.from.clone(), msg.text()) {
+    let (reply_to, user, new_text) = match (
+        msg.reply_to_message(),
+        msg.from.clone(),
+        msg.markdown_text(),
+    ) {
         (Some(reply_to), Some(user), Some(new_text)) => (reply_to, user, new_text),
         _ => return Ok(false), // Not a text reply to a message
     };
@@ -200,12 +203,12 @@ async fn handle_generic_message(
             "Ignoring old message ({}s old) from chat {}: {}",
             current_time - msg.date.timestamp(),
             msg.chat.id,
-            msg.text().unwrap_or_default()
+            msg.markdown_text().unwrap_or_default()
         );
         return Ok(());
     }
 
-    if let Some(text) = msg.text() {
+    if let Some(text) = msg.markdown_text() {
         // In groups, schedule deletion of the user's message that triggered the bot
         if msg.chat.is_group() || msg.chat.is_supergroup() {
             schedule_message_deletion(bot.clone(), cfg.clone(), msg.clone());
@@ -215,10 +218,10 @@ async fn handle_generic_message(
 
         let qa_guard = qa_emb.lock().await;
 
-        match qa_guard.find_matching_qa(text, &cfg, &key_manager).await {
+        match qa_guard.find_matching_qa(&text, &cfg, &key_manager).await {
             Ok(Some(qa_item)) => {
                 log::info!("Found matching QA: {:?}", qa_item);
-                let formatted_answer = format_answer_html(&qa_item.answer);
+                let formatted_answer = blockquote(&qa_item.answer);
                 let sent_message = bot
                     .send_message(msg.chat.id, formatted_answer)
                     .link_preview_options(LinkPreviewOptions {
@@ -228,7 +231,7 @@ async fn handle_generic_message(
                         prefer_large_media: false,
                         show_above_text: false,
                     })
-                    .parse_mode(teloxide::types::ParseMode::Html)
+                    .parse_mode(teloxide::types::ParseMode::MarkdownV2)
                     .await?;
 
                 // Use the centralized deletion scheduler

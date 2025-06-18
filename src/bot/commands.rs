@@ -5,12 +5,12 @@ use crate::config::Config;
 use crate::gemini::key_manager::GeminiKeyManager;
 use crate::qa::{QAEmbedding, get_question_hash};
 use std::sync::Arc;
-use teloxide::{
-    prelude::*,
-    sugar::request::RequestReplyExt,
-    types::{InlineKeyboardButton, InlineKeyboardMarkup},
-    utils::{command::BotCommands, markdown},
-};
+use teloxide::prelude::*;
+use teloxide::sugar::request::RequestReplyExt;
+use teloxide::types::{InlineKeyboardButton, InlineKeyboardMarkup};
+use teloxide::utils::markdown::blockquote;
+use teloxide::utils::render::RenderMessageTextHelper;
+use teloxide::utils::{command::BotCommands, markdown};
 use tokio::sync::Mutex;
 
 #[derive(BotCommands, Clone)]
@@ -97,14 +97,6 @@ pub async fn command_handler(
             schedule_message_deletion(bot.clone(), config.clone(), sent_message);
         }
         Command::AddQA => {
-            if !(msg.chat.is_group() || msg.chat.is_supergroup()) {
-                let sent_message = bot
-                    .send_message(msg.chat.id, "此命令只能在群组中使用。")
-                    .await?;
-                schedule_message_deletion(bot.clone(), config.clone(), sent_message);
-                return Ok(());
-            }
-
             let replied_to_message = match msg.reply_to_message() {
                 Some(message) => message,
                 None => {
@@ -116,7 +108,7 @@ pub async fn command_handler(
                 }
             };
 
-            let question = match replied_to_message.text() {
+            let question = match replied_to_message.markdown_text() {
                 Some(text) => text.to_string(),
                 None => {
                     let sent_message = bot
@@ -132,7 +124,7 @@ pub async fn command_handler(
                 .send_message(
                     replied_to_message.chat.id,
                     format!(
-                        "❓ *问题已捕获*\n\n> {}\n\n管理员现在必须回复此消息以提供相应答案",
+                        "❓ *问题已捕获*\n\n{}\n\n管理员现在必须回复此消息以提供相应答案",
                         markdown::escape(&question)
                     ),
                 )
@@ -161,7 +153,7 @@ pub async fn command_handler(
                 }
             };
 
-            let question_text = match replied_to.text() {
+            let question_text = match replied_to.markdown_text() {
                 Some(text) => text,
                 None => {
                     let sent_message = bot
@@ -177,15 +169,15 @@ pub async fn command_handler(
 
             // Call find_matching_qa with dependencies
             match qa_guard
-                .find_matching_qa(question_text, &config, &key_manager)
+                .find_matching_qa(&question_text, &config, &key_manager)
                 .await
             {
                 Ok(Some(qa_item)) => {
-                    let formatted_answer = crate::qa::format_answer_html(&qa_item.answer);
+                    let formatted_answer = blockquote(&qa_item.answer);
                     let sent_message = bot
                         .send_message(replied_to.chat.id, formatted_answer)
                         .reply_to(replied_to.id)
-                        .parse_mode(teloxide::types::ParseMode::Html)
+                        .parse_mode(teloxide::types::ParseMode::MarkdownV2)
                         .await?;
                     schedule_message_deletion(bot.clone(), config.clone(), sent_message);
                 }

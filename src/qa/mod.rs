@@ -6,7 +6,7 @@ pub mod types;
 mod utils;
 
 pub use types::{QAEmbedding, QAItem};
-pub use utils::{format_answer_html, get_question_hash};
+pub use utils::get_question_hash;
 
 use crate::{config::Config, gemini::key_manager::GeminiKeyManager};
 use anyhow::{Result, anyhow};

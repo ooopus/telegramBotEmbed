@@ -183,7 +183,7 @@ pub async fn callback_handler(
                     message.chat().id,
                     message.id(),
                     format!(
-                        "❓ **Question**\n\n> {}\n\nPlease reply to this message with the new answer\\.",
+                        "❓ **Question**\n\n{}\n\nPlease reply to this message with the new answer\\.",
                         markdown::escape(&question)
                     ),
                 )
