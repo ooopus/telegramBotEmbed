@@ -6,7 +6,7 @@ use crate::qa::management;
 use std::sync::Arc;
 use teloxide::prelude::*;
 use teloxide::types::{LinkPreviewOptions, Message};
-use teloxide::utils::markdown::{self, blockquote};
+use teloxide::utils::markdown::{self, expandable_blockquote};
 use teloxide::utils::render::RenderMessageTextHelper;
 use tokio::sync::Mutex;
 
@@ -221,7 +221,7 @@ async fn handle_generic_message(
         match qa_guard.find_matching_qa(&text, &cfg, &key_manager).await {
             Ok(Some(qa_item)) => {
                 log::info!("Found matching QA: {:?}", qa_item);
-                let formatted_answer = blockquote(&qa_item.answer);
+                let formatted_answer = expandable_blockquote(&qa_item.answer);
                 let sent_message = bot
                     .send_message(msg.chat.id, formatted_answer)
                     .link_preview_options(LinkPreviewOptions {

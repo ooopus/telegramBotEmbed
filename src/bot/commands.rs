@@ -8,7 +8,7 @@ use std::sync::Arc;
 use teloxide::prelude::*;
 use teloxide::sugar::request::RequestReplyExt;
 use teloxide::types::{InlineKeyboardButton, InlineKeyboardMarkup};
-use teloxide::utils::markdown::blockquote;
+use teloxide::utils::markdown::expandable_blockquote;
 use teloxide::utils::render::RenderMessageTextHelper;
 use teloxide::utils::{command::BotCommands, markdown};
 use tokio::sync::Mutex;
@@ -173,7 +173,7 @@ pub async fn command_handler(
                 .await
             {
                 Ok(Some(qa_item)) => {
-                    let formatted_answer = blockquote(&qa_item.answer);
+                    let formatted_answer = expandable_blockquote(&qa_item.answer);
                     let sent_message = bot
                         .send_message(replied_to.chat.id, formatted_answer)
                         .reply_to(replied_to.id)
