@@ -87,8 +87,8 @@ async fn handle_qa_reply(
 
                 let text = format!(
                     "**Is this Q&A pair correct?**\n\n**Q:** {}\n\n**A:** {}",
-                    markdown::escape(&question),
-                    markdown::escape(&answer)
+                    markdown::blockquote(&question),
+                    markdown::blockquote(&answer)
                 );
 
                 // This is an interactive message, do not auto-delete

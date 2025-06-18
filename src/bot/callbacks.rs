@@ -56,8 +56,8 @@ pub async fn callback_handler(
             if let Some(item) = find_qa_by_short_hash(&qa_guard, &short_hash) {
                 let text = format!(
                     "**Q:** {}\n\n**A:** {}",
-                    markdown::escape(&item.question),
-                    markdown::escape(&item.answer)
+                    markdown::blockquote(&item.question),
+                    markdown::blockquote(&item.answer)
                 );
                 let keyboard = ui::qa_management_keyboard(&short_hash);
                 bot.edit_message_text(message.chat().id, message.id(), text)
@@ -184,7 +184,7 @@ pub async fn callback_handler(
                     message.id(),
                     format!(
                         "❓ **Question**\n\n{}\n\nPlease reply to this message with the new answer\\.",
-                        markdown::escape(&question)
+                        markdown::blockquote(&question)
                     ),
                 )
                 .parse_mode(teloxide::types::ParseMode::MarkdownV2)

@@ -125,7 +125,7 @@ pub async fn command_handler(
                     replied_to_message.chat.id,
                     format!(
                         "❓ *问题已捕获*\n\n{}\n\n管理员现在必须回复此消息以提供相应答案",
-                        markdown::escape(&question)
+                        markdown::blockquote(&question)
                     ),
                 )
                 .reply_to(replied_to_message.id)
