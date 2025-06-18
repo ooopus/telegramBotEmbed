@@ -86,7 +86,7 @@ async fn handle_qa_reply(
                 };
 
                 let text = format!(
-                    "**Is this Q&A pair correct?**\n\n**Q:**\n{}\n\n**A:**\n{}",
+                    "**Is this Q&A pair correct?**\n\n**Q:**\n{}\n\n**A:**\n{}", // 使用blockquote之前必须换行
                     markdown::blockquote(&question),
                     markdown::blockquote(&answer)
                 );
