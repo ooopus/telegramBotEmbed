@@ -109,7 +109,7 @@ pub async fn command_handler(
             };
 
             let question = match replied_to_message.markdown_text() {
-                Some(text) => text.to_string(),
+                Some(text) => text,
                 None => {
                     let sent_message = bot
                         .send_message(msg.chat.id, "被回复的消息必须包含文本才能用作问题。")

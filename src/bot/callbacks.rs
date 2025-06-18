@@ -55,7 +55,7 @@ pub async fn callback_handler(
             let qa_guard = qa_embedding.lock().await;
             if let Some(item) = find_qa_by_short_hash(&qa_guard, &short_hash) {
                 let text = format!(
-                    "**Q:** {}\n\n**A:** {}",
+                    "**Q:**\n{}\n\n**A:**\n{}",
                     markdown::blockquote(&item.question),
                     markdown::blockquote(&item.answer)
                 );
@@ -84,9 +84,8 @@ pub async fn callback_handler(
             let qa_guard = qa_embedding.lock().await;
             if let Some(item) = find_qa_by_short_hash(&qa_guard, &short_hash) {
                 let full_hash = get_question_hash(&item.question);
-                drop(qa_guard); // 在调用管理函数前释放锁
+                drop(qa_guard);
 
-                // 使用新的 management 模块来处理删除和重新加载
                 match management::delete_qa(&config, &key_manager, &qa_embedding, &full_hash).await
                 {
                     Ok(_) => {
@@ -197,9 +196,8 @@ pub async fn callback_handler(
                 bot.answer_callback_query(q.id).text("Saving...").await?;
                 let new_item = QAItem { question, answer };
 
-                drop(state_guard); // 释放 state 上的锁
+                drop(state_guard);
 
-                // 使用新的 management 模块来处理添加和重新加载
                 match management::add_qa(&config, &key_manager, &qa_embedding, &new_item).await {
                     Ok(_) => {
                         bot.edit_message_text(

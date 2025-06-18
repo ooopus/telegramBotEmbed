@@ -78,7 +78,7 @@ async fn handle_qa_reply(
         match current_status {
             QAStatus::Answer { question } => {
                 let question = question.clone();
-                let answer = new_text.to_string();
+                let answer = new_text;
 
                 pending_qa.status = QAStatus::Confirmation {
                     question: question.clone(),
@@ -86,7 +86,7 @@ async fn handle_qa_reply(
                 };
 
                 let text = format!(
-                    "**Is this Q&A pair correct?**\n\n**Q:** {}\n\n**A:** {}",
+                    "**Is this Q&A pair correct?**\n\n**Q:**\n{}\n\n**A:**\n{}",
                     markdown::blockquote(&question),
                     markdown::blockquote(&answer)
                 );
@@ -102,11 +102,10 @@ async fn handle_qa_reply(
                 original_answer,
             } => {
                 let new_item = QAItem {
-                    question: new_text.to_string(),
+                    question: new_text,
                     answer: original_answer,
                 };
 
-                // 直接调用新的 management 函数
                 match management::update_qa(
                     &config,
                     &key_manager,
@@ -134,10 +133,9 @@ async fn handle_qa_reply(
             } => {
                 let new_item = QAItem {
                     question: original_question,
-                    answer: new_text.to_string(),
+                    answer: new_text,
                 };
 
-                // 直接调用新的 management 函数
                 match management::update_qa(
                     &config,
                     &key_manager,
