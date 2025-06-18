@@ -1,6 +1,6 @@
 use serde::{Deserialize, Serialize};
 
-#[derive(Debug, Clone, Deserialize, Serialize)]
+#[derive(Debug, Clone, Deserialize, Serialize, Default)]
 #[serde(default)]
 pub struct Config {
     pub telegram: TelegramConfig,
@@ -10,20 +10,6 @@ pub struct Config {
     pub message: MessageConfig,
     pub log_level: LogLevel,
     pub qa: QaConfig,
-}
-
-impl Default for Config {
-    fn default() -> Self {
-        Self {
-            telegram: TelegramConfig::default(),
-            embedding: EmbeddingConfig::default(),
-            cache: CacheConfig::default(),
-            similarity: SimilarityConfig::default(),
-            message: MessageConfig::default(),
-            log_level: LogLevel::default(),
-            qa: QaConfig::default(),
-        }
-    }
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]

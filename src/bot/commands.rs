@@ -145,7 +145,7 @@ pub async fn command_handler(
             state_guard.pending_qas.insert(
                 (bot_message.chat.id, bot_message.id),
                 PendingQAInfo {
-                    status: QAStatus::AwaitingAnswer { question },
+                    status: QAStatus::Answer { question },
                 },
             );
         }
@@ -237,8 +237,8 @@ pub async fn command_handler(
                 .qa_data
                 .iter()
                 .filter(|item| item.question.to_lowercase().contains(&lower_keywords))
-                .cloned()
                 .take(10) // Limit to 10 matches
+                .cloned()
                 .collect();
 
             if matched_qas.is_empty() {

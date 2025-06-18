@@ -23,13 +23,12 @@ pub async fn message_handler(
     state: Arc<Mutex<AppState>>,
 ) -> Result<(), anyhow::Error> {
     // If the chat is a group chat, check if it's in the allowed list.
-    if msg.chat.is_group() || msg.chat.is_supergroup() {
-        if !cfg.telegram.allowed_group_ids.is_empty()
-            && !cfg.telegram.allowed_group_ids.contains(&msg.chat.id.0)
-        {
-            log::warn!("Ignoring message from unauthorized group: {}", msg.chat.id);
-            return Ok(());
-        }
+    if (msg.chat.is_group() || msg.chat.is_supergroup())
+        && !cfg.telegram.allowed_group_ids.is_empty()
+        && !cfg.telegram.allowed_group_ids.contains(&msg.chat.id.0)
+    {
+        log::warn!("Ignoring message from unauthorized group: {}", msg.chat.id);
+        return Ok(());
     }
 
     let handled = handle_qa_reply(
@@ -74,11 +73,11 @@ async fn handle_qa_reply(
         // Clone status to avoid borrow conflicts
         let current_status = pending_qa.status.clone();
         match current_status {
-            QAStatus::AwaitingAnswer { question } => {
+            QAStatus::Answer { question } => {
                 let question = question.clone();
                 let answer = new_text.to_string();
 
-                pending_qa.status = QAStatus::AwaitingConfirmation {
+                pending_qa.status = QAStatus::Confirmation {
                     question: question.clone(),
                     answer: answer.clone(),
                 };
@@ -95,7 +94,7 @@ async fn handle_qa_reply(
                     .reply_markup(ui::confirm_reedit_cancel_keyboard())
                     .await?;
             }
-            QAStatus::AwaitingEditQuestion {
+            QAStatus::EditQuestion {
                 old_question_hash,
                 original_answer,
             } => {
@@ -126,7 +125,7 @@ async fn handle_qa_reply(
                 }
                 state_guard.pending_qas.remove(&key);
             }
-            QAStatus::AwaitingEditAnswer {
+            QAStatus::EditAnswer {
                 old_question_hash,
                 original_question,
             } => {
@@ -157,7 +156,7 @@ async fn handle_qa_reply(
                 }
                 state_guard.pending_qas.remove(&key);
             }
-            _ => { /* Other states like AwaitingConfirmation are not handled by text replies */ }
+            _ => { /* Other states like Confirmation are not handled by text replies */ }
         }
         // Delete the admin's reply message to keep the chat clean.
         if let Err(e) = bot.delete_message(msg.chat.id, msg.id).await {

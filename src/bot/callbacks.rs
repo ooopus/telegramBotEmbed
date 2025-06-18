@@ -118,7 +118,7 @@ pub async fn callback_handler(
                 let mut state_guard = state.lock().await;
                 let (new_status, prompt_text) = if action == "edit_q_prompt" {
                     (
-                        QAStatus::AwaitingEditQuestion {
+                        QAStatus::EditQuestion {
                             old_question_hash: full_hash,
                             original_answer: item.answer,
                         },
@@ -127,7 +127,7 @@ pub async fn callback_handler(
                 } else {
                     // edit_a_prompt
                     (
-                        QAStatus::AwaitingEditAnswer {
+                        QAStatus::EditAnswer {
                             old_question_hash: full_hash,
                             original_question: item.question,
                         },
@@ -174,8 +174,8 @@ pub async fn callback_handler(
             state_guard.pending_qas.remove(&key);
         }
         "reedit" => {
-            if let QAStatus::AwaitingConfirmation { question, .. } = pending_qa.status.clone() {
-                pending_qa.status = QAStatus::AwaitingAnswer {
+            if let QAStatus::Confirmation { question, .. } = pending_qa.status.clone() {
+                pending_qa.status = QAStatus::Answer {
                     question: question.clone(),
                 };
                 bot.answer_callback_query(q.id).await?;
@@ -193,7 +193,7 @@ pub async fn callback_handler(
             }
         }
         "confirm" => {
-            if let QAStatus::AwaitingConfirmation { question, answer } = pending_qa.status.clone() {
+            if let QAStatus::Confirmation { question, answer } = pending_qa.status.clone() {
                 bot.answer_callback_query(q.id).text("Saving...").await?;
                 let new_item = QAItem { question, answer };
 

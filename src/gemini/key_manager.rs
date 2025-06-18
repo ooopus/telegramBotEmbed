@@ -70,9 +70,9 @@ impl GeminiKeyManager {
 
             let is_usable = {
                 let api_key = &keys_guard[idx];
-                if api_key.disabled_until.is_some() {
-                    false
-                } else if api_key.requests.len() >= self.rpd_limit as usize {
+                if api_key.disabled_until.is_some()
+                    || api_key.requests.len() >= self.rpd_limit as usize
+                {
                     false
                 } else {
                     let requests_in_last_minute = api_key

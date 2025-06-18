@@ -5,16 +5,16 @@ use teloxide::types::{ChatId, MessageId};
 #[derive(Clone, Debug)]
 pub enum QAStatus {
     /// The bot is waiting for an administrator to reply with an answer.
-    AwaitingAnswer { question: String },
+    Answer { question: String },
     /// The bot has received an answer and is waiting for confirmation.
-    AwaitingConfirmation { question: String, answer: String },
+    Confirmation { question: String, answer: String },
     /// 等待管理员回复以提供新的问题文本
-    AwaitingEditQuestion {
+    EditQuestion {
         old_question_hash: String,
         original_answer: String,
     },
     /// 等待管理员回复以提供新的答案文本
-    AwaitingEditAnswer {
+    EditAnswer {
         old_question_hash: String,
         original_question: String,
     },
