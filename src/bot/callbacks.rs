@@ -55,7 +55,7 @@ pub async fn callback_handler(
             let qa_guard = qa_embedding.lock().await;
             if let Some(item) = find_qa_by_short_hash(&qa_guard, &short_hash) {
                 let text = format!(
-                    "**Q:**\n{}\n\n**A:**\n{}",
+                    "**Q:**\n{}\n\n**A:**\n{}", // 使用blockquote之前必须换行
                     markdown::blockquote(&item.question),
                     markdown::blockquote(&item.answer)
                 );
