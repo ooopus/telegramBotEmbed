@@ -18,7 +18,7 @@ jobs:
         include:
           - target: x86_64-unknown-linux-gnu
             os: ubuntu-latest
-          - target: x86_64-pc-windows-gnu # 或者 x86_64-pc-windows-msvc
+          - target: x86_64-pc-windows-msvc # <--- 这里已从 gnu 更改为 msvc
             os: windows-latest
           - target: x86_64-apple-darwin
             os: macos-latest
@@ -37,8 +37,8 @@ jobs:
         if: runner.os == 'Linux'
         run: sudo apt-get update && sudo apt-get install -y libssl-dev pkg-config
 
-      # Windows 和 macOS 通常不需要手动安装 OpenSSL，Rust 的 openssl-sys crate 能处理好。
-      # 如果在 Windows 上遇到问题，可以考虑使用 vcpkg 或启用 vendored 特性。
+      # Windows (MSVC) 和 macOS 通常不需要手动安装 OpenSSL，Rust 的 openssl-sys crate 能处理好。
+      # 如果在 Windows 上遇到问题，可以考虑在 Cargo.toml 中为 openssl 启用 "vendored" 特性。
       # - name: Install dependencies (Windows)
       #   if: runner.os == 'Windows'
       #   run: choco install ... # 如果有需要
