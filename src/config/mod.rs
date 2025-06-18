@@ -46,7 +46,7 @@ pub fn load_user_config() -> Result<Config> {
 
 fn get_config_directory() -> Result<PathBuf> {
     if let Some(config_dir) = dirs::config_dir() {
-        Ok(config_dir.join("telegramBotEmbed"))
+        Ok(config_dir.join("telembed"))
     } else {
         anyhow::bail!("Could not determine config directory")
     }

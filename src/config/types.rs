@@ -130,7 +130,7 @@ pub struct QaConfig {
 impl Default for QaConfig {
     fn default() -> Self {
         Self {
-            qa_json_path: "docs/QA.json".to_string(),
+            qa_json_path: "data/QA.json".to_string(),
         }
     }
 }
