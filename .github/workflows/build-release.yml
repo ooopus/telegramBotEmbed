@@ -1,17 +1,12 @@
 name: Build and Release Project
 
 on:
-  push:
-    branches:
-      - main # 仅在 main 分支有 push 时触发
-  workflow_dispatch: # 允许手动触发
-
+  workflow_dispatch:
 # 为工作流授予创建 Release 的权限
 permissions:
   contents: write
 
 jobs:
-  # 构建任务
   build:
     name: Build for ${{ matrix.target }}
     runs-on: ${{ matrix.os }}
@@ -94,9 +89,7 @@ jobs:
           name: ${{ steps.prepare_artifact.outputs.artifact_name }}
           # path 直接指向那个被重命名后的唯一文件
           path: ${{ steps.prepare_artifact.outputs.bin_path }}
-      # --- 修改结束 ---
 
-  # 发布任务（此任务无需任何修改）
   release:
     name: Create GitHub Release
     needs: build
