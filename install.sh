@@ -5,7 +5,7 @@
 #
 # 该脚本会自动下载、配置并以 systemd 服务的形式运行机器人。
 # 运行方式:
-# curl -sSL https://raw.githubusercontent.com/ooopus/telegramBotEmbed/refs/heads/main/install.sh | sudo bash
+# curl -sSL https://raw.githubusercontent.com/ooopus/telembed/refs/heads/main/install.sh | sudo bash
 # ==============================================================================
 
 set -e # 如果任何命令失败，则立即退出
@@ -18,15 +18,15 @@ SERVICE_GROUP="telembed"
 # 工作目录 (用于存放数据和缓存)
 WORK_DIR="/opt/telembed"
 # 配置目录 (根据 service 文件中的 XDG_CONFIG_HOME=/opt 和代码逻辑)
-CONFIG_DIR_BASE="/opt/telegramBotEmbed"
+CONFIG_DIR_BASE="/opt/telembed"
 
 # 日志目录
 LOG_DIR="/var/log/${SERVICE_NAME}"
 
 # 二进制文件下载链接
-BINARY_URL="https://github.com/ooopus/telegramBotEmbed/releases/latest/download/telembed-x86_64-unknown-linux-gnu"
+BINARY_URL="https://github.com/ooopus/telembed/releases/latest/download/telembed-x86_64-unknown-linux-gnu"
 # systemd 服务文件下载链接
-SERVICE_URL="https://raw.githubusercontent.com/ooopus/telegramBotEmbed/refs/heads/main/telembed.service"
+SERVICE_URL="https://raw.githubusercontent.com/ooopus/telembed/refs/heads/main/telembed.service"
 
 
 # --- 脚本开始 ---
