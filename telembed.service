@@ -1,0 +1,22 @@
+[Unit]
+Description=Telegram QA Bot
+After=network.target
+StartLimitIntervalSec=0
+
+[Service]
+Type=simple
+
+Restart=always）
+RestartSec=5
+
+User=telembed
+Group=telembed
+
+WorkingDirectory=/opt/telembed
+
+ExecStart=/usr/local/bin/telembed
+
+Environment="XDG_CONFIG_HOME=/opt"
+
+[Install]
+WantedBy=multi-user.target
