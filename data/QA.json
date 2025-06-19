@@ -1,10 +1,22 @@
 [
   {
-    "question": "单词的发音感觉不对，不是a ge ru而是类似a ne ru",
-    "answer": "鼻浊音"
+    "question": {
+      "text": "单词的发音感觉不对，不是a ge ru而是类似a ne ru",
+      "entities": []
+    },
+    "answer": {
+      "text": "鼻浊音",
+      "entities": []
+    }
   },
   {
-    "question": "回答时间的长短会影响下次复习的间隔么",
-    "answer": "不会影响"
+    "question": {
+      "text": "回答时间的长短会影响下次复习的间隔么",
+      "entities": []
+    },
+    "answer": {
+      "text": "不会影响",
+      "entities": []
+    }
   }
 ]

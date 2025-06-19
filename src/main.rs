@@ -7,7 +7,7 @@ use bot::{
 };
 use config::load_user_config;
 use gemini::key_manager::GeminiKeyManager;
-use qa::types::QAEmbedding;
+use qa::QAService; // Updated import
 use std::sync::Arc;
 use teloxide::prelude::*;
 use tokio::sync::Mutex;
@@ -19,42 +19,55 @@ mod qa;
 
 #[tokio::main]
 async fn main() -> Result<(), anyhow::Error> {
-    let cfg = Arc::new(load_user_config().context("Failed to load configuration")?);
-
-    let log_level: log::Level = cfg.log_level.clone().into();
+    // --- Configuration and Logging Setup ---
+    let config = Arc::new(load_user_config().context("Failed to load configuration")?);
+    let log_level: log::Level = config.log_level.clone().into();
     simple_logger::init_with_level(log_level).unwrap();
 
+    // --- Dependency Initialization ---
     let key_manager = Arc::new(GeminiKeyManager::new(
-        cfg.embedding.api_keys.clone(),
-        cfg.embedding.rpm,
-        cfg.embedding.rpd,
+        config.embedding.api_keys.clone(),
+        config.embedding.rpm,
+        config.embedding.rpd,
     ));
     let app_state = Arc::new(Mutex::new(AppState::new()));
+    // Create the new QAService, wrapped for sharing across threads
+    let qa_service = Arc::new(Mutex::new(QAService::new(
+        config.clone(),
+        key_manager.clone(),
+    )));
 
-    log::info!("Initializing QAEmbedding and reqwest client...");
-    let qa_embedding = Arc::new(Mutex::new(QAEmbedding::new()));
-    {
-        let mut qa_guard = qa_embedding.lock().await;
+    // --- Asynchronous QA Data Loading ---
+    let qa_service_clone = qa_service.clone();
+    let app_state_clone = app_state.clone();
+    tokio::spawn(async move {
         log::info!(
-            "Loading and embedding QA data from: {}",
-            cfg.qa.qa_json_path
+            "Starting background task to load and embed QA data from: {}",
+            qa_service_clone.lock().await.config.qa.qa_json_path // Access config via service
         );
-        if let Err(e) = qa_guard.load_and_embed_qa(&cfg, &key_manager).await {
-            log::error!("Error loading QA embeddings: {:?}", e);
+        let mut qa_guard = qa_service_clone.lock().await;
+        if let Err(e) = qa_guard.load_and_embed_all().await {
+            log::error!("Fatal error during QA data loading and embedding: {:?}", e);
         } else {
-            log::info!("Successfully loaded and processed QA data.");
-            log::info!("Number of QA items: {}", qa_guard.qa_data.len());
+            // Set the ready flag upon successful loading
+            app_state_clone.lock().await.is_qa_ready = true;
+            log::info!("✅ QA data successfully loaded and embedded. System is ready.");
+            log::info!("Number of QA items: {}", qa_guard.qa_data_len());
             log::info!(
                 "Number of embeddings: {}",
-                qa_guard.question_embeddings.len()
+                qa_guard.question_embeddings_len()
             );
         }
-    }
+    });
 
-    log::info!("Bot starting with token: {}...", &cfg.telegram.token[..8]);
+    log::info!(
+        "Bot starting with token: {}...",
+        &config.telegram.token[..8]
+    );
 
-    let bot = Bot::new(cfg.telegram.token.clone());
+    let bot = Bot::new(config.telegram.token.clone());
 
+    // --- Dispatcher Setup ---
     let handler = dptree::entry()
         .branch(
             Update::filter_message()
@@ -65,12 +78,8 @@ async fn main() -> Result<(), anyhow::Error> {
         .branch(Update::filter_message().endpoint(message_handler));
 
     Dispatcher::builder(bot, handler)
-        .dependencies(dptree::deps![
-            qa_embedding,
-            cfg.clone(),
-            key_manager,
-            app_state
-        ])
+        // Pass the new qa_service instead of the raw system/config/key_manager
+        .dependencies(dptree::deps![qa_service, app_state])
         .enable_ctrlc_handler()
         .build()
         .dispatch()

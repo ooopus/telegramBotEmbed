@@ -1,68 +1,79 @@
 //! src/qa/management.rs
 //!
-//! 该模块提供了用于管理 Q&A 项目生命周期的高级函数。
-//! 它封装了持久化（修改 JSON 文件）和状态更新（重新加载和重新嵌入数据）的逻辑，
-//! 以确保一致性并减少机器人处理器中的代码重复。
+//! This module provides high-level functions for managing the lifecycle of Q&A items.
+//! It encapsulates the logic for persistence (modifying the JSON file) and state update
+//! (reloading and re-embedding data) to ensure consistency and reduce code
+//! duplication in the bot handlers.
 
 use crate::{
     config::Config,
     gemini::key_manager::GeminiKeyManager,
     qa::{
         persistence::{add_qa_item_to_json, delete_qa_item_by_hash, update_qa_item_by_hash},
-        types::{QAEmbedding, QAItem},
+        types::{FormattedText, QAItem, QASystem},
     },
 };
 use anyhow::Result;
 use std::sync::Arc;
 use tokio::sync::Mutex;
 
-/// 添加一个新的 Q&A 项目，将其保存到 JSON 文件，并触发词向量的重新加载。
+/// Adds a new Q&A item, saves it to the JSON file, and triggers a reload of the embeddings.
 pub async fn add_qa(
     config: &Config,
     key_manager: &Arc<GeminiKeyManager>,
-    qa_embedding_mutex: &Mutex<QAEmbedding>,
-    new_item: &QAItem,
+    qa_system_mutex: &Mutex<QASystem>,
+    question: &FormattedText,
+    answer: &FormattedText,
 ) -> Result<()> {
-    // 步骤 1: 持久化新项目
-    add_qa_item_to_json(config, new_item)?;
+    // Step 1: Create the new item and persist it
+    let new_item = QAItem {
+        question: question.clone(),
+        answer: answer.clone(),
+    };
+    add_qa_item_to_json(config, &new_item)?;
 
-    // 步骤 2: 锁定并重新加载内存中的词向量
-    let mut qa_guard = qa_embedding_mutex.lock().await;
+    // Step 2: Lock and reload the in-memory embeddings
+    let mut qa_guard = qa_system_mutex.lock().await;
     qa_guard.load_and_embed_qa(config, key_manager).await?;
 
     Ok(())
 }
 
-/// 根据问题的哈希值删除一个 Q&A 项目，保存更改，并触发重新加载。
+/// Deletes a Q&A item by its question hash, saves the change, and triggers a reload.
 pub async fn delete_qa(
     config: &Config,
     key_manager: &Arc<GeminiKeyManager>,
-    qa_embedding_mutex: &Mutex<QAEmbedding>,
+    qa_system_mutex: &Mutex<QASystem>,
     question_hash: &str,
 ) -> Result<()> {
-    // 步骤 1: 持久化删除操作
+    // Step 1: Persist the deletion
     delete_qa_item_by_hash(config, question_hash)?;
 
-    // 步骤 2: 锁定并重新加载
-    let mut qa_guard = qa_embedding_mutex.lock().await;
+    // Step 2: Lock and reload
+    let mut qa_guard = qa_system_mutex.lock().await;
     qa_guard.load_and_embed_qa(config, key_manager).await?;
 
     Ok(())
 }
 
-/// 根据旧问题的哈希值更新一个现有的 Q&A 项目，并触发重新加载。
+/// Updates an existing Q&A item by its old question hash and triggers a reload.
 pub async fn update_qa(
     config: &Config,
     key_manager: &Arc<GeminiKeyManager>,
-    qa_embedding_mutex: &Mutex<QAEmbedding>,
+    qa_system_mutex: &Mutex<QASystem>,
     old_question_hash: &str,
-    new_item: &QAItem,
+    new_question: &FormattedText,
+    new_answer: &FormattedText,
 ) -> Result<()> {
-    // 步骤 1: 持久化更新操作
-    update_qa_item_by_hash(config, old_question_hash, new_item)?;
+    // Step 1: Create the updated item and persist the change
+    let new_item = QAItem {
+        question: new_question.clone(),
+        answer: new_answer.clone(),
+    };
+    update_qa_item_by_hash(config, old_question_hash, &new_item)?;
 
-    // 步骤 2: 锁定并重新加载
-    let mut qa_guard = qa_embedding_mutex.lock().await;
+    // Step 2: Lock and reload
+    let mut qa_guard = qa_system_mutex.lock().await;
     qa_guard.load_and_embed_qa(config, key_manager).await?;
 
     Ok(())

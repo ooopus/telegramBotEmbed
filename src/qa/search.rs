@@ -1,3 +1,4 @@
+use crate::qa::types::QAItem;
 use std::cmp::Ordering;
 
 /// 计算两个 f64 切片的余弦相似度
@@ -23,4 +24,19 @@ pub fn find_best_match(
         .enumerate()
         .map(|(index, q_embedding)| (index, cosine_similarity(query_embedding, q_embedding)))
         .max_by(|(_, sim_a), (_, sim_b)| sim_a.partial_cmp(sim_b).unwrap_or(Ordering::Equal))
+}
+
+/// Searches for QA items where the question text contains the given keywords.
+/// The search is case-insensitive and returns up to 10 matches.
+pub fn search_by_keyword(qa_data: &[QAItem], keywords: &str) -> Vec<QAItem> {
+    if keywords.is_empty() {
+        return Vec::new();
+    }
+    let lower_keywords = keywords.to_lowercase();
+    qa_data
+        .iter()
+        .filter(|item| item.question.text.to_lowercase().contains(&lower_keywords))
+        .take(10) // Limit the number of results to avoid overly large responses
+        .cloned()
+        .collect()
 }

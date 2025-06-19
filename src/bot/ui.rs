@@ -5,23 +5,33 @@
 //! a consistent look and feel across the bot and reduces code duplication in the
 //! handler modules.
 
+use crate::bot::types::CallbackData;
 use teloxide::types::{InlineKeyboardButton, InlineKeyboardMarkup};
+
+/// Serializes a CallbackData enum into a JSON string for use in an InlineKeyboardButton.
+/// Panics on failure, as serialization of the internal enum should never fail.
+fn create_callback_data(data: CallbackData) -> String {
+    serde_json::to_string(&data).expect("Failed to serialize callback data")
+}
 
 // --- Single Buttons ---
 
 /// Creates a standard "Cancel" button with the callback data "cancel".
 pub fn cancel_button() -> InlineKeyboardButton {
-    InlineKeyboardButton::callback("❌ Cancel", "cancel")
+    InlineKeyboardButton::callback("❌ Cancel", create_callback_data(CallbackData::Cancel))
 }
 
 /// Creates a standard "Confirm" button with the callback data "confirm".
 pub fn confirm_button() -> InlineKeyboardButton {
-    InlineKeyboardButton::callback("✅ Confirm", "confirm")
+    InlineKeyboardButton::callback("✅ Confirm", create_callback_data(CallbackData::Confirm))
 }
 
 /// Creates a standard "Re-edit Answer" button with the callback data "reedit".
 pub fn reedit_answer_button() -> InlineKeyboardButton {
-    InlineKeyboardButton::callback("📝 Re-edit Answer", "reedit")
+    InlineKeyboardButton::callback(
+        "📝 Re-edit Answer",
+        create_callback_data(CallbackData::Reedit),
+    )
 }
 
 // --- Keyboards ---
@@ -40,24 +50,23 @@ pub fn confirm_reedit_cancel_keyboard() -> InlineKeyboardMarkup {
 ///
 /// # Arguments
 /// * `short_hash` - A unique (but potentially truncated) hash identifying the QA item.
-///
-/// Contains "Edit Question", "Edit Answer", and "Delete" buttons.
 pub fn qa_management_keyboard(short_hash: &str) -> InlineKeyboardMarkup {
+    let edit_q_data = create_callback_data(CallbackData::EditQuestionPrompt {
+        short_hash: short_hash.to_string(),
+    });
+    let edit_a_data = create_callback_data(CallbackData::EditAnswerPrompt {
+        short_hash: short_hash.to_string(),
+    });
+    let delete_data = create_callback_data(CallbackData::DeletePrompt {
+        short_hash: short_hash.to_string(),
+    });
+
     InlineKeyboardMarkup::new(vec![
         vec![
-            InlineKeyboardButton::callback(
-                "📝 Edit Question",
-                format!("edit_q_prompt:{}", short_hash),
-            ),
-            InlineKeyboardButton::callback(
-                "📝 Edit Answer",
-                format!("edit_a_prompt:{}", short_hash),
-            ),
+            InlineKeyboardButton::callback("📝 Edit Question", edit_q_data),
+            InlineKeyboardButton::callback("📝 Edit Answer", edit_a_data),
         ],
-        vec![InlineKeyboardButton::callback(
-            "🗑️ Delete",
-            format!("delete_prompt:{}", short_hash),
-        )],
+        vec![InlineKeyboardButton::callback("🗑️ Delete", delete_data)],
     ])
 }
 
@@ -65,12 +74,17 @@ pub fn qa_management_keyboard(short_hash: &str) -> InlineKeyboardMarkup {
 ///
 /// # Arguments
 /// * `short_hash` - A unique (but potentially truncated) hash identifying the QA item.
-///
-/// Contains "Yes, Delete" and "No, Cancel" buttons.
 pub fn delete_confirmation_keyboard(short_hash: &str) -> InlineKeyboardMarkup {
+    let confirm_data = create_callback_data(CallbackData::DeleteConfirm {
+        short_hash: short_hash.to_string(),
+    });
+    let cancel_data = create_callback_data(CallbackData::ViewQa {
+        short_hash: short_hash.to_string(),
+    });
+
     InlineKeyboardMarkup::new(vec![vec![
-        InlineKeyboardButton::callback("✅ Yes, Delete", format!("delete_confirm:{}", short_hash)),
-        InlineKeyboardButton::callback("❌ No, Cancel", format!("view_qa:{}", short_hash)),
+        InlineKeyboardButton::callback("✅ Yes, Delete", confirm_data),
+        InlineKeyboardButton::callback("❌ No, Cancel", cancel_data),
     ]])
 }
 
@@ -80,9 +94,12 @@ pub fn delete_confirmation_keyboard(short_hash: &str) -> InlineKeyboardMarkup {
 /// * `short_hash` - A unique (but potentially truncated) hash identifying the QA item
 ///   to return to on cancellation.
 pub fn cancel_edit_keyboard(short_hash: &str) -> InlineKeyboardMarkup {
+    let cancel_data = create_callback_data(CallbackData::ViewQa {
+        short_hash: short_hash.to_string(),
+    });
     InlineKeyboardMarkup::new(vec![vec![InlineKeyboardButton::callback(
         "❌ Cancel",
-        format!("view_qa:{}", short_hash),
+        cancel_data,
     )]])
 }
 
