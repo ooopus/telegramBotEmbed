@@ -3,12 +3,16 @@ use crate::{
         state::{AppState, PendingQAInfo, QAStatus},
         types::CallbackData,
         ui,
-        utils::is_admin,
+        utils::{bold, combine_texts, ensure_blockquote, is_admin},
     },
-    qa::QAService, // Use the new QAService
+    qa::{QAService, types::FormattedText},
 };
 use std::sync::Arc;
-use teloxide::{prelude::*, requests::Requester};
+use teloxide::{
+    prelude::*,
+    requests::Requester,
+    types::{MessageEntityKind, ParseMode},
+};
 use tokio::sync::Mutex;
 
 /// Handles all callback queries from inline keyboards.
@@ -16,9 +20,8 @@ pub async fn callback_handler(
     bot: Bot,
     callback_query: CallbackQuery,
     state: Arc<Mutex<AppState>>,
-    qa_service: Arc<Mutex<QAService>>, // Now uses the service
+    qa_service: Arc<Mutex<QAService>>,
 ) -> Result<(), anyhow::Error> {
-    // Extract necessary data and a clone of the config from the service
     let (user, message, data, config) = {
         let service_guard = qa_service.lock().await;
         let config_clone = service_guard.config.clone();
@@ -32,7 +35,6 @@ pub async fn callback_handler(
         }
     };
 
-    // --- Authorization Check ---
     if !is_admin(&bot, message.chat().id, user.id, &config).await {
         bot.answer_callback_query(callback_query.id)
             .text("Only administrators can perform this action.")
@@ -41,7 +43,6 @@ pub async fn callback_handler(
         return Ok(());
     }
 
-    // --- Deserialize Callback Data ---
     let callback_data: CallbackData = match serde_json::from_str(&data) {
         Ok(data) => data,
         Err(e) => {
@@ -52,74 +53,27 @@ pub async fn callback_handler(
 
     let pending_qa_key = (message.chat().id, message.id());
 
-    // --- Actions that don't depend on pending_qas state ---
-    // These actions are self-contained and can be handled immediately.
     match callback_data.clone() {
         CallbackData::ViewQa { short_hash } => {
             state.lock().await.pending_qas.remove(&pending_qa_key);
             let service_guard = qa_service.lock().await;
             if let Some((item, _)) = service_guard.find_by_short_hash(&short_hash) {
-                // --- Blockquote display logic ---
-                let mut display_question = item.question.clone();
-                if !display_question.text.is_empty()
-                    && !display_question
-                        .entities
-                        .iter()
-                        .any(|e| matches!(e.kind, teloxide::types::MessageEntityKind::Blockquote))
-                {
-                    display_question.entities.insert(
-                        0,
-                        teloxide::types::MessageEntity {
-                            kind: teloxide::types::MessageEntityKind::Blockquote,
-                            offset: 0,
-                            length: display_question.text.encode_utf16().count(),
-                        },
-                    );
-                }
-
-                let mut display_answer = item.answer.clone();
-                if !display_answer.text.is_empty()
-                    && !display_answer
-                        .entities
-                        .iter()
-                        .any(|e| matches!(e.kind, teloxide::types::MessageEntityKind::Blockquote))
-                {
-                    display_answer.entities.insert(
-                        0,
-                        teloxide::types::MessageEntity {
-                            kind: teloxide::types::MessageEntityKind::Blockquote,
-                            offset: 0,
-                            length: display_answer.text.encode_utf16().count(),
-                        },
-                    );
-                }
-                // --- End blockquote logic ---
-
-                let header = "Q:\n";
-                let separator = "\n\nA:\n";
-                let final_text = format!(
-                    "{}{}{}{}",
-                    header, display_question.text, separator, display_answer.text
+                let display_question = ensure_blockquote(
+                    item.question.clone(),
+                    MessageEntityKind::ExpandableBlockquote,
                 );
+                let display_answer =
+                    ensure_blockquote(item.answer.clone(), MessageEntityKind::ExpandableBlockquote);
 
-                let mut final_entities = display_question.entities.clone();
-                let q_offset = header.encode_utf16().count();
-                for entity in &mut final_entities {
-                    entity.offset += q_offset;
-                }
+                let q_header = bold("Q:\n");
+                let a_header = bold("\n\nA:\n");
 
-                let mut answer_entities = display_answer.entities.clone();
-                let a_offset = (header.to_string() + &display_question.text + separator)
-                    .encode_utf16()
-                    .count();
-                for entity in &mut answer_entities {
-                    entity.offset += a_offset;
-                }
-                final_entities.extend(answer_entities);
+                let combined =
+                    combine_texts(&[&q_header, &display_question, &a_header, &display_answer]);
 
                 let keyboard = ui::qa_management_keyboard(&short_hash);
-                bot.edit_message_text(message.chat().id, message.id(), final_text)
-                    .entities(final_entities)
+                bot.edit_message_text(message.chat().id, message.id(), combined.text)
+                    .entities(combined.entities)
                     .reply_markup(keyboard)
                     .await?;
             }
@@ -138,7 +92,6 @@ pub async fn callback_handler(
         }
         CallbackData::DeleteConfirm { short_hash } => {
             let mut service_guard = qa_service.lock().await;
-            // Get the full hash from the service to ensure we delete the correct item
             if let Some((_, full_hash)) = service_guard.find_by_short_hash(&short_hash) {
                 match service_guard.delete_qa(&full_hash).await {
                     Ok(_) => {
@@ -165,14 +118,13 @@ pub async fn callback_handler(
         CallbackData::EditQuestionPrompt { short_hash }
         | CallbackData::EditAnswerPrompt { short_hash } => {
             let service_guard = qa_service.lock().await;
-            // Get the item and its full hash from the service
             if let Some((item, full_hash)) = service_guard.find_by_short_hash(&short_hash) {
                 let mut state_guard = state.lock().await;
                 let (new_status, prompt_text) =
                     if matches!(callback_data, CallbackData::EditQuestionPrompt { .. }) {
                         (
                             QAStatus::EditQuestion {
-                                old_question_hash: full_hash, // Use the full hash
+                                old_question_hash: full_hash,
                                 original_answer: item.answer.clone(),
                             },
                             "Please reply to this message with the **new question**.",
@@ -180,7 +132,7 @@ pub async fn callback_handler(
                     } else {
                         (
                             QAStatus::EditAnswer {
-                                old_question_hash: full_hash, // Use the full hash
+                                old_question_hash: full_hash,
                                 original_question: item.question.clone(),
                             },
                             "Please reply to this message with the **new answer**.",
@@ -193,7 +145,7 @@ pub async fn callback_handler(
 
                 let keyboard = ui::cancel_edit_keyboard(&short_hash);
                 bot.edit_message_text(message.chat().id, message.id(), prompt_text)
-                    .parse_mode(teloxide::types::ParseMode::MarkdownV2)
+                    .parse_mode(ParseMode::MarkdownV2)
                     .reply_markup(keyboard)
                     .await?;
             }
@@ -202,8 +154,6 @@ pub async fn callback_handler(
         _ => {}
     }
 
-    // --- Actions that DO depend on pending_qas state ---
-    // These actions are part of a multi-step conversation flow.
     let mut state_guard = state.lock().await;
     let pending_qa = match state_guard.pending_qas.get_mut(&pending_qa_key) {
         Some(info) => info,
@@ -229,35 +179,19 @@ pub async fn callback_handler(
                 };
                 bot.answer_callback_query(callback_query.id).await?;
 
-                let mut display_question = question.clone();
-                let has_blockquote = display_question
-                    .entities
-                    .iter()
-                    .any(|e| matches!(e.kind, teloxide::types::MessageEntityKind::Blockquote));
+                let display_question =
+                    ensure_blockquote(question.clone(), MessageEntityKind::ExpandableBlockquote);
 
-                if !has_blockquote && !display_question.text.is_empty() {
-                    display_question.entities.insert(
-                        0,
-                        teloxide::types::MessageEntity {
-                            kind: teloxide::types::MessageEntityKind::Blockquote,
-                            offset: 0,
-                            length: display_question.text.encode_utf16().count(),
-                        },
-                    );
-                }
+                let header = bold("❓ Question\n\n");
+                let footer = FormattedText {
+                    text: "\n\nPlease reply to this message with the new answer.".to_string(),
+                    entities: vec![],
+                };
 
-                let header = "❓ **Question**\n\n";
-                let footer = "\n\nPlease reply to this message with the new answer.";
-                let final_text = format!("{}{}{}", header, display_question.text, footer);
+                let combined = combine_texts(&[&header, &display_question, &footer]);
 
-                let mut final_entities = display_question.entities.clone();
-                let offset = header.encode_utf16().count();
-                for entity in &mut final_entities {
-                    entity.offset += offset;
-                }
-
-                bot.edit_message_text(message.chat().id, message.id(), final_text)
-                    .entities(final_entities)
+                bot.edit_message_text(message.chat().id, message.id(), combined.text)
+                    .entities(combined.entities)
                     .reply_markup(ui::reedit_keyboard())
                     .await?;
             }
@@ -268,7 +202,6 @@ pub async fn callback_handler(
                     .text("Saving...")
                     .await?;
 
-                // Release the lock on state before awaiting the service call.
                 drop(state_guard);
 
                 let mut service_guard = qa_service.lock().await;
@@ -291,11 +224,9 @@ pub async fn callback_handler(
                         .await?;
                     }
                 }
-                // Re-acquire lock to remove the pending QA
                 state.lock().await.pending_qas.remove(&pending_qa_key);
             }
         }
-        // Other cases were handled above or are not applicable here.
         _ => {}
     }
 

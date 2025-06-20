@@ -7,7 +7,7 @@ use bot::{
 };
 use config::load_user_config;
 use gemini::key_manager::GeminiKeyManager;
-use qa::QAService; // Updated import
+use qa::QAService;
 use std::sync::Arc;
 use teloxide::prelude::*;
 use tokio::sync::Mutex;

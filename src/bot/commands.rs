@@ -1,15 +1,19 @@
 use crate::bot::state::{AppState, PendingQAInfo, QAStatus};
 use crate::bot::ui;
-use crate::bot::utils::{is_admin, is_super_admin, schedule_message_deletion};
+use crate::bot::utils::{
+    bold, combine_texts, ensure_blockquote, is_admin, is_super_admin, schedule_message_deletion,
+};
 use crate::config::Config;
 use crate::qa::types::{FormattedText, QAItem};
-use crate::qa::{QAService, get_question_hash, search}; // Use QAService
+use crate::qa::{QAService, get_question_hash, search};
 use chrono::{Duration, Utc};
 use std::sync::Arc;
 use teloxide::prelude::*;
 use teloxide::requests::Requester;
 use teloxide::sugar::request::RequestReplyExt;
-use teloxide::types::{ChatId, InlineKeyboardButton, InlineKeyboardMarkup, Message};
+use teloxide::types::{
+    ChatId, InlineKeyboardButton, InlineKeyboardMarkup, Message, MessageEntityKind,
+};
 use teloxide::utils::command::BotCommands;
 use tokio::sync::Mutex;
 
@@ -41,15 +45,13 @@ pub async fn command_handler(
     message: Message,
     command: Command,
     state: Arc<Mutex<AppState>>,
-    qa_service: Arc<Mutex<QAService>>, // Use QAService
+    qa_service: Arc<Mutex<QAService>>,
 ) -> Result<(), anyhow::Error> {
     let chat_id = message.chat.id;
     let user_id = message.from.as_ref().map(|u| u.id);
 
-    // Get config from the service
     let config = qa_service.lock().await.config.clone();
 
-    // Super admin check for private chats
     if chat_id.is_user() {
         if let Some(uid) = user_id {
             if !is_super_admin(uid, &config) {
@@ -58,11 +60,10 @@ pub async fn command_handler(
                 return Ok(());
             }
         } else {
-            return Ok(()); // Should not happen
+            return Ok(());
         }
     }
 
-    // Group authorization check
     if !chat_id.is_user()
         && !config.telegram.allowed_group_ids.is_empty()
         && !config.telegram.allowed_group_ids.contains(&chat_id.0)
@@ -73,14 +74,12 @@ pub async fn command_handler(
 
     schedule_message_deletion(bot.clone(), config.clone(), message.clone());
 
-    // --- Admin Check for Admin-Only Commands ---
     let is_user_admin = if let Some(uid) = user_id {
         is_admin(&bot, chat_id, uid, &config).await
     } else {
-        false // Ignore if no user
+        false
     };
 
-    // --- Command Dispatch ---
     let admin_only_handler = |bot: Bot, chat_id: ChatId, config: Arc<Config>| async move {
         let sent = bot
             .send_message(chat_id, "只有管理员才能使用此命令。")
@@ -126,8 +125,6 @@ pub async fn command_handler(
     Ok(())
 }
 
-// --- Helper Functions ---
-
 async fn check_qa_ready(
     bot: Bot,
     chat_id: ChatId,
@@ -163,8 +160,6 @@ fn make_qa_keyboard(list: &[QAItem]) -> InlineKeyboardMarkup {
         .collect();
     InlineKeyboardMarkup::new(buttons)
 }
-
-// --- Individual Command Handlers ---
 
 async fn handle_start(bot: Bot, chat_id: ChatId, config: Arc<Config>) -> Result<(), anyhow::Error> {
     let sent_message = bot
@@ -202,34 +197,23 @@ async fn handle_add_qa(
         entities: replied_to_message.entities().unwrap_or_default().to_vec(),
     };
 
-    let mut display_question = question_from_reply.clone();
-    let has_blockquote = display_question
-        .entities
-        .iter()
-        .any(|e| matches!(e.kind, teloxide::types::MessageEntityKind::Blockquote));
+    let display_question = ensure_blockquote(
+        question_from_reply.clone(),
+        MessageEntityKind::ExpandableBlockquote,
+    );
 
-    if !has_blockquote && !display_question.text.is_empty() {
-        display_question.entities.insert(
-            0,
-            teloxide::types::MessageEntity {
-                kind: teloxide::types::MessageEntityKind::ExpandableBlockquote,
-                offset: 0,
-                length: display_question.text.encode_utf16().count(),
-            },
-        );
-    }
+    // 使用我们新的格式化工具来构建消息
+    let header = bold("❓ 问题已捕获\n\n");
+    let footer = FormattedText {
+        text: "\n\n管理员现在必须回复此消息以提供相应答案。".to_string(),
+        entities: vec![],
+    };
 
-    let header = "❓ 问题已捕获\n\n";
-    let footer = "\n\n管理员现在必须回复此消息以提供相应答案。";
-    let final_text = format!("{}{}{}", header, display_question.text, footer);
-
-    let mut final_entities = display_question.entities.clone();
-    let offset = header.encode_utf16().count();
-    final_entities.iter_mut().for_each(|e| e.offset += offset);
+    let combined = combine_texts(&[&header, &display_question, &footer]);
 
     let bot_message = bot
-        .send_message(message.chat.id, final_text)
-        .entities(final_entities)
+        .send_message(message.chat.id, combined.text)
+        .entities(combined.entities)
         .reply_to(replied_to_message.id)
         .reply_markup(ui::simple_cancel_keyboard())
         .await?;
@@ -379,25 +363,11 @@ async fn handle_answer(
     let service_guard = qa_service.lock().await;
     match service_guard.find_matching_qa(question_text).await {
         Ok(Some(qa_item)) => {
-            let answer_text = qa_item.answer.text.clone();
-            let mut answer_entities = qa_item.answer.entities.clone();
-
-            let has_blockquote = answer_entities
-                .iter()
-                .any(|e| matches!(e.kind, teloxide::types::MessageEntityKind::Blockquote));
-
-            if !has_blockquote && !answer_text.is_empty() {
-                let blockquote_entity = teloxide::types::MessageEntity {
-                    kind: teloxide::types::MessageEntityKind::Blockquote,
-                    offset: 0,
-                    length: answer_text.encode_utf16().count(),
-                };
-                answer_entities.insert(0, blockquote_entity);
-            }
+            let answer = ensure_blockquote(qa_item.answer, MessageEntityKind::Blockquote);
 
             let sent = bot
-                .send_message(replied_to.chat.id, answer_text)
-                .entities(answer_entities)
+                .send_message(replied_to.chat.id, answer.text)
+                .entities(answer.entities)
                 .reply_to(replied_to.id)
                 .await?;
             schedule_message_deletion(bot, config, sent);

@@ -1,19 +1,21 @@
 use crate::bot::state::{AppState, QAStatus};
 use crate::bot::ui;
-use crate::bot::utils::{is_admin, schedule_message_deletion};
-use crate::qa::QAService; // Use QAService
+use crate::bot::utils::{
+    bold, combine_texts, ensure_blockquote, is_admin, schedule_message_deletion,
+};
+use crate::qa::QAService;
 use crate::qa::types::FormattedText;
 use std::sync::Arc;
 use teloxide::prelude::*;
 use teloxide::requests::Requester;
-use teloxide::types::{LinkPreviewOptions, Message};
+use teloxide::types::{LinkPreviewOptions, Message, MessageEntityKind};
 use tokio::sync::Mutex;
 
-/// The main message handler, which routes to the appropriate logic.
+// ... message_handler function remains unchanged ...
 pub async fn message_handler(
     bot: Bot,
     message: Message,
-    qa_service: Arc<Mutex<QAService>>, // Use QAService
+    qa_service: Arc<Mutex<QAService>>,
     state: Arc<Mutex<AppState>>,
 ) -> Result<(), anyhow::Error> {
     // Clone config from service at the beginning
@@ -80,8 +82,6 @@ async fn handle_qa_reply(
         // Must clone config here to release the lock on qa_service quickly
         let config_clone = qa_service.lock().await.config.clone();
         if !is_admin(&bot, message.chat.id, user.id, &config_clone).await {
-            // If a non-admin replies to the bot's prompt, ignore it but consider it "handled"
-            // to prevent it from being processed by the generic message handler.
             return Ok(true);
         }
 
@@ -90,7 +90,6 @@ async fn handle_qa_reply(
             entities: new_entities,
         };
 
-        // Clone the status to work with it, then update the original `pending_qa`
         let current_status = pending_qa.status.clone();
         match current_status {
             QAStatus::Answer { question } => {
@@ -99,66 +98,29 @@ async fn handle_qa_reply(
                     answer: new_formatted_text.clone(),
                 };
 
-                // --- Blockquote display logic ---
-                let mut display_question = question.clone();
-                if !display_question.text.is_empty()
-                    && !display_question
-                        .entities
-                        .iter()
-                        .any(|e| matches!(e.kind, teloxide::types::MessageEntityKind::Blockquote))
-                {
-                    display_question.entities.insert(
-                        0,
-                        teloxide::types::MessageEntity {
-                            kind: teloxide::types::MessageEntityKind::Blockquote,
-                            offset: 0,
-                            length: display_question.text.encode_utf16().count(),
-                        },
-                    );
-                }
-
-                let mut display_answer = new_formatted_text.clone();
-                if !display_answer.text.is_empty()
-                    && !display_answer
-                        .entities
-                        .iter()
-                        .any(|e| matches!(e.kind, teloxide::types::MessageEntityKind::Blockquote))
-                {
-                    display_answer.entities.insert(
-                        0,
-                        teloxide::types::MessageEntity {
-                            kind: teloxide::types::MessageEntityKind::Blockquote,
-                            offset: 0,
-                            length: display_answer.text.encode_utf16().count(),
-                        },
-                    );
-                }
-                // --- End blockquote logic ---
-
-                let header = "Is this Q&A pair correct?**\n\nQ:\n";
-                let separator = "\n\nA:\n";
-                let final_text = format!(
-                    "{}{}{}{}",
-                    header, display_question.text, separator, display_answer.text
+                let display_question =
+                    ensure_blockquote(question.clone(), MessageEntityKind::ExpandableBlockquote);
+                let display_answer = ensure_blockquote(
+                    new_formatted_text.clone(),
+                    MessageEntityKind::ExpandableBlockquote,
                 );
 
-                // Combine and offset entities for the confirmation message
-                let mut final_entities = display_question.entities.clone();
-                let q_offset = header.encode_utf16().count();
-                final_entities.iter_mut().for_each(|e| e.offset += q_offset);
+                // 创建带格式的各个部分
+                let title = bold("Is this Q&A pair correct?");
+                let q_header = bold("\n\nQ:\n");
+                let a_header = bold("\n\nA:\n");
 
-                let mut answer_entities = display_answer.entities.clone();
-                let a_offset = (header.to_string() + &display_question.text + separator)
-                    .encode_utf16()
-                    .count();
-                answer_entities
-                    .iter_mut()
-                    .for_each(|e| e.offset += a_offset);
+                // 使用新的 combine_texts 函数将它们组合起来
+                let combined = combine_texts(&[
+                    &title,
+                    &q_header,
+                    &display_question,
+                    &a_header,
+                    &display_answer,
+                ]);
 
-                final_entities.extend(answer_entities);
-
-                bot.edit_message_text(pending_qa_key.0, pending_qa_key.1, final_text)
-                    .entities(final_entities)
+                bot.edit_message_text(pending_qa_key.0, pending_qa_key.1, combined.text)
+                    .entities(combined.entities)
                     .reply_markup(ui::confirm_reedit_cancel_keyboard())
                     .await?;
             }
@@ -166,7 +128,6 @@ async fn handle_qa_reply(
                 old_question_hash,
                 original_answer,
             } => {
-                // Release state lock before async service call
                 drop(state_guard);
                 let mut service_guard = qa_service.lock().await;
                 service_guard
@@ -178,14 +139,12 @@ async fn handle_qa_reply(
                     "✅ QA pair updated successfully!",
                 )
                 .await?;
-                // Re-acquire lock to remove pending state
                 state.lock().await.pending_qas.remove(&pending_qa_key);
             }
             QAStatus::EditAnswer {
                 old_question_hash,
                 original_question,
             } => {
-                // Release state lock before async service call
                 drop(state_guard);
                 let mut service_guard = qa_service.lock().await;
                 service_guard
@@ -197,37 +156,33 @@ async fn handle_qa_reply(
                     "✅ QA pair updated successfully!",
                 )
                 .await?;
-                // Re-acquire lock to remove pending state
                 state.lock().await.pending_qas.remove(&pending_qa_key);
             }
-            _ => {} // Not expecting other statuses here
+            _ => {}
         }
 
-        // Clean up the admin's reply message
         if let Err(e) = bot.delete_message(message.chat.id, message.id).await {
             log::warn!("Failed to delete admin's reply message: {:?}", e);
         }
-        Ok(true) // Message was handled as part of a QA flow
+        Ok(true)
     } else {
-        Ok(false) // Not a reply to a pending QA message
+        Ok(false)
     }
 }
 
 /// Handles any message that is not a command or a reply in a QA flow.
-async fn handle_generic_message(
+pub async fn handle_generic_message(
     bot: Bot,
     message: Message,
     qa_service: Arc<Mutex<QAService>>,
     state: Arc<Mutex<AppState>>,
 ) -> Result<(), anyhow::Error> {
-    // 0. Check if the QA system is ready. If not, do nothing.
     if !state.lock().await.is_qa_ready {
         return Ok(());
     }
 
     let config = qa_service.lock().await.config.clone();
 
-    // 1. Check if the bot is snoozed
     {
         let mut state_guard = state.lock().await;
         if let Some(snoozed_until) = state_guard.snoozed_until {
@@ -244,7 +199,6 @@ async fn handle_generic_message(
         }
     }
 
-    // 2. Private chat check: Only super admins can trigger generic responses
     if message.chat.is_private() {
         if let Some(ref user) = message.from {
             if !crate::bot::utils::is_super_admin(user.id, &config) {
@@ -255,13 +209,11 @@ async fn handle_generic_message(
         }
     }
 
-    // 3. Message freshness check
     let current_time = chrono::Utc::now().timestamp();
     if (current_time - message.date.timestamp()) > config.message.timeout {
         return Ok(());
     }
 
-    // 4. Process the message text
     if let Some(text) = message.text() {
         if message.chat.is_group() || message.chat.is_supergroup() {
             schedule_message_deletion(bot.clone(), config.clone(), message.clone());
@@ -277,25 +229,12 @@ async fn handle_generic_message(
         match service_guard.find_matching_qa(text).await {
             Ok(Some(qa_item)) => {
                 log::info!("Found matching QA: {:?}", qa_item);
-                let answer_text = qa_item.answer.text.clone();
-                let mut answer_entities = qa_item.answer.entities.clone();
-
-                let has_blockquote = answer_entities
-                    .iter()
-                    .any(|e| matches!(e.kind, teloxide::types::MessageEntityKind::Blockquote));
-
-                if !has_blockquote && !answer_text.is_empty() {
-                    let blockquote_entity = teloxide::types::MessageEntity {
-                        kind: teloxide::types::MessageEntityKind::Blockquote,
-                        offset: 0,
-                        length: answer_text.encode_utf16().count(),
-                    };
-                    answer_entities.insert(0, blockquote_entity);
-                }
+                let answer =
+                    ensure_blockquote(qa_item.answer, MessageEntityKind::ExpandableBlockquote);
 
                 let sent_message = bot
-                    .send_message(message.chat.id, answer_text)
-                    .entities(answer_entities)
+                    .send_message(message.chat.id, answer.text)
+                    .entities(answer.entities)
                     .link_preview_options(LinkPreviewOptions {
                         is_disabled: true,
                         url: None,
